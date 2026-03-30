@@ -32,7 +32,7 @@ export function toM2mLang(code: string): string {
 const VOICE_DEFAULT = "21m00Tcm4TlvDq8ikWAM";
 
 /** Distinct voice for system announcements so they're clearly "the AI". */
-export const ANNOUNCE_VOICE = "EXAVITQu4vr4xnSDxMaL";
+export const ANNOUNCE_VOICE = "jqcCZkN6Knx8BJ5TBdYR";
 
 export function voiceIdForHearLang(_hearCode: string): string {
   return VOICE_DEFAULT;
