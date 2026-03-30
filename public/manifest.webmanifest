@@ -1,0 +1,17 @@
+{
+  "name": "Meetly",
+  "short_name": "Meetly",
+  "description": "Video calls with real-time voice translation",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFDF5",
+  "theme_color": "#0F4C5C",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

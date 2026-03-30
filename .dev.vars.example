@@ -1,0 +1,2 @@
+# Copy to .dev.vars for local dev (never commit .dev.vars)
+ELEVENLABS_KEY=your_elevenlabs_api_key
