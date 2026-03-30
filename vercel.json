@@ -3,5 +3,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "public",
   "framework": null,
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/join", "destination": "/index.html" },
+    { "source": "/join/", "destination": "/index.html" },
+    { "source": "/MEETLY-:code", "destination": "/index.html" },
+    { "source": "/MEETLY-:code/", "destination": "/index.html" }
+  ]
 }

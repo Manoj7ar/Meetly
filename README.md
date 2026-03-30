@@ -87,6 +87,8 @@ Meetly’s **API, WebSockets, AI, and Durable Objects** stay on **Cloudflare**. 
 
 If `MEETLY_API_ORIGIN` is unset, the UI uses `window.location.origin` (normal **Cloudflare-only** deploy).
 
+**Do not** use a catch-all rewrite to `index.html` for this app on Vercel: it would rewrite **`POST /api/room`** to the HTML document and the edge returns **HTTP 405**. The included `vercel.json` only rewrites **`/join`** and **`/MEETLY-…`** room paths.
+
 ## HTTP and WebSocket endpoints
 
 | Method / path | Description |
