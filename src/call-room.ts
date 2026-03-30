@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { elevenLabsTts, transcribe, translateText } from "./pipeline.js";
+import { elevenLabsTts, transcribe, translateText, announceTts } from "./pipeline.js";
+import { langLabel } from "./lang.js";
 
 const IDLE_MS = 30 * 60 * 1000;
 const MAX_NAME = 64;
@@ -9,6 +10,7 @@ type Participant = {
   speakLang: string;
   hearLang: string;
   displayName: string;
+  voiceType: string;
 };
 
 export class CallRoom extends DurableObject<Env> {
@@ -24,6 +26,18 @@ export class CallRoom extends DurableObject<Env> {
 
   private async bumpIdleAlarm(): Promise<void> {
     await this.ctx.storage.setAlarm(Date.now() + IDLE_MS);
+  }
+
+  private async sendAnnouncement(ws: WebSocket, text: string): Promise<void> {
+    ws.send(JSON.stringify({ type: "announcement", text }));
+    try {
+      const audio = await announceTts(this.env, text);
+      if (audio && audio.byteLength > 0) {
+        ws.send(audio);
+      }
+    } catch (e) {
+      console.error("announcement tts error", e);
+    }
   }
 
   private resetRoomState(): void {
@@ -74,6 +88,7 @@ export class CallRoom extends DurableObject<Env> {
         speakLang?: string;
         hearLang?: string;
         displayName?: string;
+        voiceType?: string;
         payload?: unknown;
       };
       try {
@@ -87,6 +102,7 @@ export class CallRoom extends DurableObject<Env> {
         const hearLang = parsed.hearLang ?? "en";
         let displayName = String(parsed.displayName ?? "Guest").trim().slice(0, MAX_NAME);
         if (!displayName) displayName = "Guest";
+        const voiceType = parsed.voiceType === "male" ? "male" : "female";
 
         const isFirst = this.participants.size === 0;
         if (isFirst) {
@@ -95,7 +111,7 @@ export class CallRoom extends DurableObject<Env> {
         }
 
         this.wsToId.set(ws, id);
-        this.participants.set(id, { id, ws, speakLang, hearLang, displayName });
+        this.participants.set(id, { id, ws, speakLang, hearLang, displayName, voiceType });
         const others = [...this.participants.keys()].filter((k) => k !== id);
         const existingPeers = others.map((oid) => {
           const op = this.participants.get(oid);
@@ -115,14 +131,45 @@ export class CallRoom extends DurableObject<Env> {
             peers: existingPeers,
           })
         );
+
+        if (others.length === 0) {
+          this.ctx.waitUntil(
+            this.sendAnnouncement(
+              ws,
+              `Welcome to Meetly, ${displayName}. You're the host. ` +
+              `Your room is ready. Share the code to invite someone. ` +
+              `Live translation is standing by.`
+            )
+          );
+        } else {
+          const hostP = this.participants.get(others[0]);
+          const hostLang = hostP ? langLabel(hostP.speakLang) : "unknown";
+          this.ctx.waitUntil(
+            this.sendAnnouncement(
+              ws,
+              `Welcome ${displayName}. You've joined the meeting. ` +
+              `The host speaks ${hostLang}. ` +
+              `Live translation is now active. Speak naturally.`
+            )
+          );
+        }
+
         for (const oid of others) {
           const o = this.participants.get(oid);
-          o?.ws.send(
+          if (!o) continue;
+          o.ws.send(
             JSON.stringify({
               type: "peer-joined",
               participantId: id,
               displayName,
             })
+          );
+          this.ctx.waitUntil(
+            this.sendAnnouncement(
+              o.ws,
+              `${displayName} has joined. They speak ${langLabel(speakLang)}. ` +
+              `Live translation is now active.`
+            )
           );
         }
         return;
@@ -169,33 +216,48 @@ export class CallRoom extends DurableObject<Env> {
       return;
     }
 
+    let text: string;
     try {
-      const text = await transcribe(this.env, bytes);
-      if (!text) return;
-      const translated = await translateText(
-        this.env,
-        text,
-        speaker.speakLang,
-        other.hearLang
-      );
-      if (!translated) return;
-      const audio = await elevenLabsTts(this.env, translated, other.hearLang);
+      text = await transcribe(this.env, bytes);
+    } catch (e) {
+      console.error("transcribe error", e);
+      return;
+    }
+    if (!text) return;
+
+    let translated: string;
+    try {
+      translated = await translateText(this.env, text, speaker.speakLang, other.hearLang);
+    } catch (e) {
+      console.error("translate error", e);
+      ws.send(JSON.stringify({ type: "error", message: "translate failed" }));
+      return;
+    }
+    if (!translated) return;
+
+    try {
+      const audio = await elevenLabsTts(this.env, translated, speaker.voiceType);
       if (audio && audio.byteLength > 0) {
         other.ws.send(audio);
       }
     } catch (e) {
-      console.error("pipeline error", e);
-      ws.send(JSON.stringify({ type: "error", message: "translation failed" }));
+      console.error("tts error", e);
+      ws.send(JSON.stringify({ type: "error", message: "tts failed" }));
     }
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
     const id = this.wsToId.get(ws);
     if (!id) return;
+    const leaving = this.participants.get(id);
+    const leaveName = leaving?.displayName ?? "A participant";
     this.wsToId.delete(ws);
     this.participants.delete(id);
     for (const p of this.participants.values()) {
       p.ws.send(JSON.stringify({ type: "peer-left", participantId: id }));
+      this.ctx.waitUntil(
+        this.sendAnnouncement(p.ws, `${leaveName} has left the meeting.`)
+      );
     }
     if (this.participants.size === 0) {
       await this.ctx.storage.deleteAlarm();

@@ -1,3 +1,12 @@
+const LANG_LABELS: Record<string, string> = {
+  en: "English", zh: "Mandarin", es: "Spanish", fr: "French", de: "German",
+  ja: "Japanese", ko: "Korean", hi: "Hindi", ar: "Arabic", pt: "Portuguese",
+};
+
+export function langLabel(code: string): string {
+  return LANG_LABELS[code] ?? code;
+}
+
 /** m2m100-1.2b expects lowercase full language names (Workers AI docs). */
 export const LANG_TO_M2M: Record<string, string> = {
   en: "english",
@@ -16,13 +25,12 @@ export function toM2mLang(code: string): string {
   return LANG_TO_M2M[code] ?? "english";
 }
 
-/** Hackathon demo: two ElevenLabs voices (English vs Mandarin-style output). */
-export const VOICE_ENGLISH = "TX3LPjm3pTSxNOyVWf8s";
-export const VOICE_MANDARIN = "pNInz6obpgDQGcFmaJgB";
+const VOICE_FEMALE = "21m00Tcm4TlvDq8ikWAM"; // Rachel
+const VOICE_MALE = "pNInz6obpgDQGcFmaJgB";   // Adam
 
-export function voiceIdForHearLang(hearCode: string): string {
-  if (hearCode === "zh" || hearCode === "ja" || hearCode === "ko") {
-    return VOICE_MANDARIN;
-  }
-  return VOICE_ENGLISH;
+/** Distinct voice for system announcements so they're clearly "the AI". */
+export const ANNOUNCE_VOICE = "jqcCZkN6Knx8BJ5TBdYR";
+
+export function voiceIdForSpeaker(voiceType: string): string {
+  return voiceType === "male" ? VOICE_MALE : VOICE_FEMALE;
 }

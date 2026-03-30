@@ -112,6 +112,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
   const [hear, setHear] = useState("es");
   const [joinInput, setJoinInput] = useState("");
   const [hostName, setHostName] = useState("");
+  const [voiceType, setVoiceType] = useState("female");
   const [creating, setCreating] = useState(false);
   const [createErr, setCreateErr] = useState("");
 
@@ -119,6 +120,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
     setCreateErr("");
     sessionStorage.setItem("meetly_speak", speak);
     sessionStorage.setItem("meetly_hear", hear);
+    sessionStorage.setItem("meetly_voice_type", voiceType);
     const name = hostName.trim() || "Host";
     sessionStorage.setItem("meetly_display_name", name.slice(0, 64));
     sessionStorage.setItem("meetly_role", "host");
@@ -149,7 +151,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
     <div className="min-h-full flex flex-col items-center px-4 py-10">
       <h1 className="text-4xl font-semibold text-teal tracking-tight mb-2">Meetly</h1>
       <p className="text-sm text-ink/70 mb-8 text-center max-w-sm">
-        Speak your language — they hear theirs. Video + translated voice.
+        Speak your language, they hear theirs. Real-time video calls with live translated voice.
       </p>
 
       <form
@@ -206,6 +208,34 @@ function Landing({ onRoomCreated, onGoToJoin }) {
             </select>
           </label>
         </div>
+
+        <label className="block text-xs font-medium text-teal uppercase tracking-wide">
+          My voice sounds like
+          <div className="mt-1 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setVoiceType("female")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                voiceType === "female"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
+              }`}
+            >
+              Female
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceType("male")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                voiceType === "male"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
+              }`}
+            >
+              Male
+            </button>
+          </div>
+        </label>
 
         {createErr && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2" role="alert">
@@ -267,6 +297,7 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
   const [codeInput, setCodeInput] = useState(initialCode.length >= 10 ? "" : "");
   const [displayName, setDisplayName] = useState("");
   const [speak, setSpeak] = useState("en");
+  const [voiceType, setVoiceType] = useState("female");
   const [meta, setMeta] = useState({ hasHost: false, hostSpeakLang: null, hostHearLang: null });
   const [metaErr, setMetaErr] = useState("");
 
@@ -307,6 +338,7 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
     sessionStorage.setItem("meetly_display_name", name);
     sessionStorage.setItem("meetly_speak", speak);
     sessionStorage.setItem("meetly_hear", speak);
+    sessionStorage.setItem("meetly_voice_type", voiceType);
     onEnterRoom(code);
   };
 
@@ -373,6 +405,33 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
             ))}
           </select>
         </label>
+        <label className="block text-xs font-medium text-teal uppercase tracking-wide">
+          My voice sounds like
+          <div className="mt-1 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setVoiceType("female")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                voiceType === "female"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
+              }`}
+            >
+              Female
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceType("male")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                voiceType === "male"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
+              }`}
+            >
+              Male
+            </button>
+          </div>
+        </label>
 
         <button
           type="button"
@@ -398,6 +457,7 @@ function CallView({ room, mode, onLeave }) {
   const [camOn, setCamOn] = useState(true);
   const [err, setErr] = useState("");
   const [remotePeerName, setRemotePeerName] = useState("");
+  const [announcement, setAnnouncement] = useState("");
 
   const localName = sessionStorage.getItem("meetly_display_name") || (mode === "host" ? "Host" : "Guest");
 
@@ -553,6 +613,8 @@ function CallView({ room, mode, onLeave }) {
       ws.send(JSON.stringify({ type: "signal", payload: { sdp: { type: offer.type, sdp: offer.sdp } } }));
     };
 
+    const voiceType = sessionStorage.getItem("meetly_voice_type") || "female";
+
     ws.onopen = () => {
       setStatus("Connected");
       ws.send(
@@ -561,8 +623,10 @@ function CallView({ room, mode, onLeave }) {
           speakLang: speak,
           hearLang: hear,
           displayName: displayName.trim().slice(0, 64) || "Guest",
+          voiceType,
         })
       );
+      startRecordingCycle();
     };
 
     ws.onmessage = async (ev) => {
@@ -620,6 +684,11 @@ function CallView({ room, mode, onLeave }) {
         }
         return;
       }
+      if (msg.type === "announcement") {
+        setAnnouncement(msg.text || "");
+        setTimeout(() => setAnnouncement(""), 6000);
+        return;
+      }
       if (msg.type === "error") {
         setErr(msg.message || "Error");
         return;
@@ -636,13 +705,34 @@ function CallView({ room, mode, onLeave }) {
     let mime = "audio/webm;codecs=opus";
     if (!MediaRecorder.isTypeSupported(mime)) mime = "audio/webm";
     const aStream = new MediaStream([atrack]);
-    const rec = new MediaRecorder(aStream, { mimeType: mime });
-    recRef.current = rec;
-    rec.ondataavailable = (e) => {
-      if (!micOnRef.current) return;
-      if (e.data && e.data.size > 0 && ws.readyState === 1) ws.send(e.data);
+    const CHUNK_MS = 3000;
+
+    const startRecordingCycle = () => {
+      const cycle = () => {
+        if (!wsRef.current || wsRef.current.readyState !== 1) return;
+        const r = new MediaRecorder(aStream, { mimeType: mime });
+        recRef.current = r;
+        const chunks = [];
+        r.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+        r.onstop = () => {
+          if (!micOnRef.current || chunks.length === 0) return;
+          const blob = new Blob(chunks, { type: mime });
+          if (blob.size > 0 && wsRef.current && wsRef.current.readyState === 1) {
+            wsRef.current.send(blob);
+          }
+        };
+        r.start();
+        setTimeout(() => {
+          if (r.state === "recording") {
+            r.stop();
+            cycle();
+          }
+        }, CHUNK_MS);
+      };
+      cycle();
     };
-    rec.start(250);
   }, [room, speak, hear, mode, enqueueAudio, flushIce, startOnceKey]);
 
   useEffect(() => {
@@ -714,6 +804,11 @@ function CallView({ room, mode, onLeave }) {
         <span className="text-xs font-mono text-teal truncate max-w-[55%]">{room}</span>
         <span className="text-xs text-ink/50">{status}</span>
       </div>
+      {announcement && (
+        <div className="mb-3 rounded-xl bg-teal/10 border border-teal/20 px-4 py-2.5 text-sm text-teal text-center animate-pulse">
+          {announcement}
+        </div>
+      )}
       {err && <p className="text-sm text-red-600 mb-2">{err}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-h-0">
