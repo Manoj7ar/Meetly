@@ -497,10 +497,25 @@ function CallView({ room, mode, onLeave }) {
     }
   }, []);
 
+  const muteForPlayback = useCallback(() => {
+    const s = streamRef.current;
+    if (!s) return;
+    const a = s.getAudioTracks()[0];
+    if (a) a.enabled = false;
+  }, []);
+
+  const unmuteAfterPlayback = useCallback(() => {
+    const s = streamRef.current;
+    if (!s || !micOnRef.current) return;
+    const a = s.getAudioTracks()[0];
+    if (a) a.enabled = true;
+  }, []);
+
   const playNextInQueue = useCallback(async () => {
     if (playBusyRef.current || playQueueRef.current.length === 0) return;
     playBusyRef.current = true;
     const chunk = playQueueRef.current.shift();
+    muteForPlayback();
     try {
       const blob = new Blob([chunk], { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
@@ -508,20 +523,23 @@ function CallView({ room, mode, onLeave }) {
       audio.onended = () => {
         URL.revokeObjectURL(url);
         playBusyRef.current = false;
+        unmuteAfterPlayback();
         playNextInQueue();
       };
       audio.onerror = () => {
         URL.revokeObjectURL(url);
         playBusyRef.current = false;
+        unmuteAfterPlayback();
         playNextInQueue();
       };
       await audio.play();
     } catch (e) {
       console.warn("audio play", e);
       playBusyRef.current = false;
+      unmuteAfterPlayback();
       playNextInQueue();
     }
-  }, []);
+  }, [muteForPlayback, unmuteAfterPlayback]);
 
   const enqueueAudio = useCallback(
     (buf) => {
