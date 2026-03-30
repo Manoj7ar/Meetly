@@ -21,6 +21,7 @@ export class CallRoom extends DurableObject<Env> {
   /** Set from the first participant’s join message for this room session. */
   private hostSpeakLang: string | null = null;
   private hostHearLang: string | null = null;
+  private transcriptLog: string[] = [];
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -224,6 +225,8 @@ export class CallRoom extends DurableObject<Env> {
         }));
       }
 
+      this.transcriptLog.push(`${speakerName}: ${text}`);
+
       speakerWs.send(JSON.stringify({
         type: "transcript", from: "self", name: speakerName, text,
       }));
@@ -263,6 +266,24 @@ export class CallRoom extends DurableObject<Env> {
     })());
   }
 
+  private async generateSummary(): Promise<string> {
+    if (this.transcriptLog.length < 2) return "";
+    const transcript = this.transcriptLog.slice(-60).join("\n");
+    try {
+      const res = (await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+        messages: [
+          { role: "system", content: "You summarize meeting transcripts in 2-3 concise sentences. Focus on key topics discussed and any decisions made. Do not add greetings or filler." },
+          { role: "user", content: `Summarize this meeting transcript:\n\n${transcript}` },
+        ],
+        max_tokens: 150,
+      })) as { response?: string };
+      return (res.response ?? "").trim();
+    } catch (e) {
+      console.error("summary error", e);
+      return "";
+    }
+  }
+
   async webSocketClose(ws: WebSocket): Promise<void> {
     const id = this.wsToId.get(ws);
     if (!id) return;
@@ -270,13 +291,28 @@ export class CallRoom extends DurableObject<Env> {
     const leaveName = leaving?.displayName ?? "A participant";
     this.wsToId.delete(ws);
     this.participants.delete(id);
+
     for (const p of this.participants.values()) {
       p.ws.send(JSON.stringify({ type: "peer-left", participantId: id }));
       p.ws.send(JSON.stringify({ type: "announcement", text: `${leaveName} left.` }));
     }
+
+    if (this.participants.size > 0 && this.transcriptLog.length >= 2) {
+      const remaining = [...this.participants.values()];
+      this.ctx.waitUntil((async () => {
+        const summary = await this.generateSummary();
+        if (summary) {
+          for (const p of remaining) {
+            p.ws.send(JSON.stringify({ type: "meeting-summary", summary }));
+          }
+        }
+      })());
+    }
+
     if (this.participants.size === 0) {
       await this.ctx.storage.deleteAlarm();
       this.resetRoomState();
+      this.transcriptLog = [];
     }
   }
 }
