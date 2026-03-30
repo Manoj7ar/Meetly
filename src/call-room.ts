@@ -216,48 +216,52 @@ export class CallRoom extends DurableObject<Env> {
       return;
     }
 
-    let text: string;
-    try {
-      text = await transcribe(this.env, bytes);
-    } catch (e) {
-      console.error("transcribe error", e);
-      return;
-    }
-    if (!text) return;
+    const speakerWs = ws;
+    const otherWs = other.ws;
+    const speakerName = speaker.displayName;
+    const speakerLang = speaker.speakLang;
+    const otherHearLang = other.hearLang;
+    const speakerVoiceType = speaker.voiceType;
+    const env = this.env;
 
-    ws.send(JSON.stringify({
-      type: "transcript",
-      from: "self",
-      name: speaker.displayName,
-      text,
-    }));
-
-    let translated: string;
-    try {
-      translated = await translateText(this.env, text, speaker.speakLang, other.hearLang);
-    } catch (e) {
-      console.error("translate error", e);
-      ws.send(JSON.stringify({ type: "error", message: "translate failed" }));
-      return;
-    }
-    if (!translated) return;
-
-    other.ws.send(JSON.stringify({
-      type: "transcript",
-      from: "peer",
-      name: speaker.displayName,
-      text: translated,
-    }));
-
-    try {
-      const audio = await elevenLabsTts(this.env, translated, speaker.voiceType);
-      if (audio && audio.byteLength > 0) {
-        other.ws.send(audio);
+    this.ctx.waitUntil((async () => {
+      let text: string;
+      try {
+        text = await transcribe(env, bytes);
+      } catch (e) {
+        console.error("transcribe error", e);
+        return;
       }
-    } catch (e) {
-      console.error("tts error", e);
-      ws.send(JSON.stringify({ type: "error", message: "tts failed" }));
-    }
+      if (!text) return;
+
+      speakerWs.send(JSON.stringify({
+        type: "transcript", from: "self", name: speakerName, text,
+      }));
+
+      const translatePromise = translateText(env, text, speakerLang, otherHearLang);
+
+      let translated: string;
+      try {
+        translated = await translatePromise;
+      } catch (e) {
+        console.error("translate error", e);
+        return;
+      }
+      if (!translated) return;
+
+      otherWs.send(JSON.stringify({
+        type: "transcript", from: "peer", name: speakerName, text: translated,
+      }));
+
+      try {
+        const audio = await elevenLabsTts(env, translated, speakerVoiceType);
+        if (audio && audio.byteLength > 0) {
+          otherWs.send(audio);
+        }
+      } catch (e) {
+        console.error("tts error", e);
+      }
+    })());
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {

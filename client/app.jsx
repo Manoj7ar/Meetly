@@ -472,7 +472,6 @@ function CallView({ room, mode, onLeave }) {
   const isHostRef = useRef(false);
   const iceBufRef = useRef([]);
   const remoteDescSetRef = useRef(false);
-  const audioCtxRef = useRef(null);
   const playBusyRef = useRef(false);
   const playQueueRef = useRef([]);
   const micOnRef = useRef(true);
@@ -503,22 +502,22 @@ function CallView({ room, mode, onLeave }) {
     playBusyRef.current = true;
     const chunk = playQueueRef.current.shift();
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      const ctx = audioCtxRef.current || new Ctx();
-      audioCtxRef.current = ctx;
-      if (ctx.state === "suspended") await ctx.resume();
-      const ab = chunk.slice(0);
-      const audioBuf = await ctx.decodeAudioData(ab);
-      const src = ctx.createBufferSource();
-      src.buffer = audioBuf;
-      src.connect(ctx.destination);
-      src.onended = () => {
+      const blob = new Blob([chunk], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
         playBusyRef.current = false;
         playNextInQueue();
       };
-      src.start();
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        playBusyRef.current = false;
+        playNextInQueue();
+      };
+      await audio.play();
     } catch (e) {
-      console.warn("audio decode", e);
+      console.warn("audio play", e);
       playBusyRef.current = false;
       playNextInQueue();
     }
@@ -714,7 +713,7 @@ function CallView({ room, mode, onLeave }) {
     let mime = "audio/webm;codecs=opus";
     if (!MediaRecorder.isTypeSupported(mime)) mime = "audio/webm";
     const aStream = new MediaStream([atrack]);
-    const CHUNK_MS = 3000;
+    const CHUNK_MS = 2000;
 
     const startRecordingCycle = () => {
       const cycle = () => {
