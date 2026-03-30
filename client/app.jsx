@@ -636,13 +636,34 @@ function CallView({ room, mode, onLeave }) {
     let mime = "audio/webm;codecs=opus";
     if (!MediaRecorder.isTypeSupported(mime)) mime = "audio/webm";
     const aStream = new MediaStream([atrack]);
-    const rec = new MediaRecorder(aStream, { mimeType: mime });
-    recRef.current = rec;
-    rec.ondataavailable = (e) => {
-      if (!micOnRef.current) return;
-      if (e.data && e.data.size > 0 && ws.readyState === 1) ws.send(e.data);
+
+    const CHUNK_MS = 2500;
+    let currentRec = null;
+    const cycle = () => {
+      if (!wsRef.current || wsRef.current.readyState !== 1) return;
+      const r = new MediaRecorder(aStream, { mimeType: mime });
+      currentRec = r;
+      recRef.current = r;
+      const chunks = [];
+      r.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+      r.onstop = () => {
+        if (!micOnRef.current || chunks.length === 0) return;
+        const blob = new Blob(chunks, { type: mime });
+        if (blob.size > 0 && wsRef.current && wsRef.current.readyState === 1) {
+          wsRef.current.send(blob);
+        }
+      };
+      r.start();
+      setTimeout(() => {
+        if (r.state === "recording") {
+          r.stop();
+          cycle();
+        }
+      }, CHUNK_MS);
     };
-    rec.start(250);
+    cycle();
   }, [room, speak, hear, mode, enqueueAudio, flushIce, startOnceKey]);
 
   useEffect(() => {

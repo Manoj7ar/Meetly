@@ -16,13 +16,12 @@ export function toM2mLang(code: string): string {
   return LANG_TO_M2M[code] ?? "english";
 }
 
-/** Hackathon demo: two ElevenLabs voices (English vs Mandarin-style output). */
-export const VOICE_ENGLISH = "TX3LPjm3pTSxNOyVWf8s";
-export const VOICE_MANDARIN = "pNInz6obpgDQGcFmaJgB";
+/**
+ * ElevenLabs multilingual voice: "Rachel" — clear, natural, works well
+ * across all 32 languages supported by eleven_turbo_v2_5.
+ */
+const VOICE_DEFAULT = "21m00Tcm4TlvDq8ikWAM";
 
-export function voiceIdForHearLang(hearCode: string): string {
-  if (hearCode === "zh" || hearCode === "ja" || hearCode === "ko") {
-    return VOICE_MANDARIN;
-  }
-  return VOICE_ENGLISH;
+export function voiceIdForHearLang(_hearCode: string): string {
+  return VOICE_DEFAULT;
 }

@@ -169,23 +169,33 @@ export class CallRoom extends DurableObject<Env> {
       return;
     }
 
+    let text: string;
     try {
-      const text = await transcribe(this.env, bytes);
-      if (!text) return;
-      const translated = await translateText(
-        this.env,
-        text,
-        speaker.speakLang,
-        other.hearLang
-      );
-      if (!translated) return;
+      text = await transcribe(this.env, bytes);
+    } catch (e) {
+      console.error("transcribe error", e);
+      return;
+    }
+    if (!text) return;
+
+    let translated: string;
+    try {
+      translated = await translateText(this.env, text, speaker.speakLang, other.hearLang);
+    } catch (e) {
+      console.error("translate error", e);
+      ws.send(JSON.stringify({ type: "error", message: "translate failed" }));
+      return;
+    }
+    if (!translated) return;
+
+    try {
       const audio = await elevenLabsTts(this.env, translated, other.hearLang);
       if (audio && audio.byteLength > 0) {
         other.ws.send(audio);
       }
     } catch (e) {
-      console.error("pipeline error", e);
-      ws.send(JSON.stringify({ type: "error", message: "translation failed" }));
+      console.error("tts error", e);
+      ws.send(JSON.stringify({ type: "error", message: "tts failed" }));
     }
   }
 
