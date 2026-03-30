@@ -23,7 +23,11 @@ function getPath() {
 /** When the UI is on Vercel (or any static host), set MEETLY_API_ORIGIN at build time to your Cloudflare Worker URL (no trailing slash). */
 function apiOrigin() {
   const raw = typeof window !== "undefined" ? window.__MEETLY_API_ORIGIN__ : "";
-  if (typeof raw === "string" && raw.trim()) return raw.trim().replace(/\/$/, "");
+  if (typeof raw === "string" && raw.trim()) {
+    let o = raw.trim().replace(/\/$/, "");
+    if (!/^https?:\/\//i.test(o)) o = "https://" + o;
+    return o;
+  }
   return window.location.origin;
 }
 
