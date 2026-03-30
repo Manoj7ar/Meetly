@@ -1026,8 +1026,8 @@ function CallView({ room, mode, onLeave }) {
 
   return (
     <div className="min-h-full flex flex-col px-3 py-4 pb-8 max-w-3xl mx-auto w-full">
-      {mode === "host" && (
-        <div className="mb-4 rounded-2xl border border-teal/20 bg-offwhite p-4 text-center">
+      {mode === "host" && !remotePeerName && (
+        <div className="mb-4 rounded-2xl border border-teal/20 bg-offwhite p-4 text-center transition-all duration-500 ease-in-out">
           <p className="text-xs uppercase tracking-wide text-teal font-medium mb-1">Share with friends</p>
           <p className="text-lg font-mono font-semibold text-ink break-all">{room}</p>
           <div className="flex justify-center mt-3 mb-3">
@@ -1069,7 +1069,7 @@ function CallView({ room, mode, onLeave }) {
       )}
       {err && <p className="text-sm text-red-600 mb-2">{err}</p>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-h-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-h-0 transition-all duration-500 ease-in-out">
         <div className="relative rounded-2xl overflow-hidden bg-offwhite border border-teal/15 aspect-video shadow-sm">
           <video ref={localV} autoPlay playsInline muted className="w-full h-full bg-black/10" />
           <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wide bg-teal/90 text-cream px-2 py-0.5 rounded max-w-[90%] truncate">
@@ -1115,7 +1115,7 @@ function CallView({ room, mode, onLeave }) {
         >
           {screenSharing ? "Stop share" : "Share screen"}
         </button>
-        {mode === "host" && (
+        {mode === "host" && !remotePeerName && (
           <button
             type="button"
             onClick={copyLink}
