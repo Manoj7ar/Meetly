@@ -10,12 +10,12 @@ export interface TranscribeResult {
 const HALLUCINATION_RE = /^(you|thank you|thanks|thanks for watching|bye|okay|oh|uh|um|hmm|ah|huh|yeah|yes|no|so|the end|\.+|,+|\!+|\?+)\.?$/i;
 
 export async function transcribe(env: Env, audioBytes: Uint8Array): Promise<TranscribeResult> {
-  if (audioBytes.byteLength < 2000) return { text: "", detectedLang: "" };
+  if (audioBytes.byteLength < 500) return { text: "", detectedLang: "" };
   const res = (await env.AI.run("@cf/openai/whisper", {
     audio: [...audioBytes],
   })) as { text?: string; language?: string };
   const text = (res.text ?? "").trim();
-  if (text.length < 4) return { text: "", detectedLang: "" };
+  if (text.length < 3) return { text: "", detectedLang: "" };
   if (HALLUCINATION_RE.test(text)) return { text: "", detectedLang: "" };
   return { text, detectedLang: res.language ?? "" };
 }
