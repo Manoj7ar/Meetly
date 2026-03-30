@@ -16,6 +16,10 @@ const LANGS = [
 
 const ROOM_RE = /^\/(MEETLY-[A-Z0-9-]+)\/?$/;
 
+function getPath() {
+  return window.location.pathname.replace(/\/+$/, "") || "/";
+}
+
 function langLabel(code) {
   return LANGS.find((l) => l.code === code)?.label || code;
 }
@@ -39,11 +43,66 @@ function wsUrlForRoom(room) {
   return u.toString();
 }
 
-function Landing() {
+async function postCreateRoom() {
+  const url = new URL("/api/room", window.location.origin).href;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: "{}",
+    cache: "no-store",
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    const hint = text.trim().startsWith("<") ? "Got HTML instead of JSON — is the API route running?" : text.slice(0, 200);
+    throw new Error(hint || "HTTP " + r.status);
+  }
+  let j;
+  try {
+    j = JSON.parse(text);
+  } catch {
+    throw new Error("Invalid JSON from server");
+  }
+  if (!j.room) throw new Error("No room in response");
+  return String(j.room);
+}
+
+function Landing({ onRoomCreated, onGoToJoin }) {
   const [speak, setSpeak] = useState("en");
   const [hear, setHear] = useState("es");
   const [joinInput, setJoinInput] = useState("");
   const [hostName, setHostName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+
+  const createMeeting = async () => {
+    setCreateErr("");
+    sessionStorage.setItem("meetly_speak", speak);
+    sessionStorage.setItem("meetly_hear", hear);
+    const name = hostName.trim() || "Host";
+    sessionStorage.setItem("meetly_display_name", name.slice(0, 64));
+    sessionStorage.setItem("meetly_role", "host");
+    setCreating(true);
+    try {
+      const room = await postCreateRoom();
+      onRoomCreated(room);
+    } catch (e) {
+      console.error(e);
+      setCreateErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const joinWithCode = () => {
+    const code = normalizeRoomParam(joinInput);
+    if (code.length < 10) {
+      alert("Enter a valid code");
+      return;
+    }
+    sessionStorage.setItem("meetly_speak", speak);
+    sessionStorage.setItem("meetly_hear", hear);
+    onGoToJoin(code);
+  };
 
   return (
     <div className="min-h-full flex flex-col items-center px-4 py-10">
@@ -52,7 +111,11 @@ function Landing() {
         Speak your language — they hear theirs. Video + translated voice.
       </p>
 
-      <div className="w-full max-w-md bg-offwhite rounded-2xl shadow-sm border border-teal/10 p-6 space-y-4">
+      <form
+        className="w-full max-w-md bg-offwhite rounded-2xl shadow-sm border border-teal/10 p-6 space-y-4"
+        onSubmit={(e) => e.preventDefault()}
+        noValidate
+      >
         <label className="block text-xs font-medium text-teal uppercase tracking-wide">
           Your name (optional)
           <input
@@ -103,12 +166,24 @@ function Landing() {
           </label>
         </div>
 
+        {createErr && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2" role="alert">
+            {createErr}
+          </p>
+        )}
+
         <button
           type="button"
           id="meetly-create-btn"
+          disabled={creating}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void createMeeting();
+          }}
           className="w-full rounded-xl bg-teal text-cream py-3 text-sm font-semibold hover:bg-teal-dark disabled:opacity-50"
         >
-          Create meeting
+          {creating ? "Creating…" : "Create meeting"}
         </button>
 
         <div className="relative py-2">
@@ -130,17 +205,21 @@ function Landing() {
           <button
             type="button"
             id="meetly-join-btn"
+            onClick={(e) => {
+              e.preventDefault();
+              joinWithCode();
+            }}
             className="rounded-xl border-2 border-teal text-teal px-4 py-2 text-sm font-semibold hover:bg-teal/5"
           >
             Join
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
 
-function JoinLobby() {
+function JoinLobby({ onEnterRoom, onGoHome }) {
   const params = new URLSearchParams(window.location.search);
   const initialCode = normalizeRoomParam(params.get("code") || "");
   const [room, setRoom] = useState(initialCode.length >= 10 ? initialCode : "");
@@ -187,7 +266,7 @@ function JoinLobby() {
     sessionStorage.setItem("meetly_display_name", name);
     sessionStorage.setItem("meetly_speak", speak);
     sessionStorage.setItem("meetly_hear", speak);
-    window.location.assign("/" + code);
+    onEnterRoom(code);
   };
 
   return (
@@ -262,11 +341,7 @@ function JoinLobby() {
         >
           Join meeting
         </button>
-        <button
-          type="button"
-          onClick={() => (window.location.href = "/")}
-          className="w-full text-sm text-ink/50 underline"
-        >
+        <button type="button" onClick={onGoHome} className="w-full text-sm text-ink/50 underline">
           Back home
         </button>
       </div>
@@ -274,7 +349,7 @@ function JoinLobby() {
   );
 }
 
-function CallView({ room, mode }) {
+function CallView({ room, mode, onLeave }) {
   const [speak] = useState(() => sessionStorage.getItem("meetly_speak") || "en");
   const [hear] = useState(() => sessionStorage.getItem("meetly_hear") || "en");
   const [status, setStatus] = useState(mode === "host" || mode === "guest" ? "Starting…" : "");
@@ -377,8 +452,9 @@ function CallView({ room, mode }) {
     sessionStorage.removeItem(startOnceKey);
     teardown();
     sessionStorage.removeItem("meetly_role");
-    window.location.href = "/";
-  }, [teardown, startOnceKey]);
+    if (onLeave) onLeave();
+    else window.location.href = "/";
+  }, [teardown, startOnceKey, onLeave]);
 
   const startCall = useCallback(async () => {
     if (sessionStorage.getItem(startOnceKey)) return;
@@ -651,10 +727,26 @@ function CallView({ room, mode }) {
 }
 
 function App() {
-  const path = window.location.pathname.replace(/\/$/, "") || "/";
+  const [path, setPath] = useState(getPath);
+
+  useEffect(() => {
+    const sync = () => setPath(getPath());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  const go = useCallback((href) => {
+    window.history.pushState(null, "", href);
+    setPath(getPath());
+  }, []);
 
   if (path === "/join") {
-    return <JoinLobby />;
+    return (
+      <JoinLobby
+        onEnterRoom={(code) => go("/" + code)}
+        onGoHome={() => go("/")}
+      />
+    );
   }
 
   const m = path.match(ROOM_RE);
@@ -665,10 +757,21 @@ function App() {
       window.location.replace("/join?code=" + encodeURIComponent(room));
       return null;
     }
-    return <CallView room={room} mode={role === "host" ? "host" : "guest"} />;
+    return (
+      <CallView
+        room={room}
+        mode={role === "host" ? "host" : "guest"}
+        onLeave={() => go("/")}
+      />
+    );
   }
 
-  return <Landing />;
+  return (
+    <Landing
+      onRoomCreated={(room) => go("/" + room)}
+      onGoToJoin={(code) => go("/join?code=" + encodeURIComponent(code))}
+    />
+  );
 }
 
 const el = document.getElementById("root");
