@@ -143,7 +143,7 @@ function MeetingEnded({ transcripts, summary, onGoHome }) {
       <button
         type="button"
         onClick={onGoHome}
-        className="rounded-2xl glass-teal text-cream px-6 py-3 text-sm font-semibold"
+        className="rounded-xl bg-teal text-cream px-6 py-3 text-sm font-semibold hover:bg-teal-dark"
       >
         Back to home
       </button>
@@ -350,10 +350,10 @@ function Landing({ onRoomCreated, onGoToJoin }) {
             <button
               type="button"
               onClick={() => setVoiceType("female")}
-              className={`flex-1 rounded-2xl px-3 py-2 text-sm font-medium ${
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 voiceType === "female"
-                  ? "glass-teal text-cream"
-                  : "glass-teal text-cream opacity-50"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
               }`}
             >
               Female
@@ -361,10 +361,10 @@ function Landing({ onRoomCreated, onGoToJoin }) {
             <button
               type="button"
               onClick={() => setVoiceType("male")}
-              className={`flex-1 rounded-2xl px-3 py-2 text-sm font-medium ${
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 voiceType === "male"
-                  ? "glass-teal text-cream"
-                  : "glass-teal text-cream opacity-50"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
               }`}
             >
               Male
@@ -387,7 +387,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
             e.stopPropagation();
             void createMeeting();
           }}
-          className="w-full rounded-2xl glass-teal text-cream py-3 text-sm font-semibold disabled:opacity-50"
+          className="w-full rounded-xl bg-teal text-cream py-3 text-sm font-semibold hover:bg-teal-dark disabled:opacity-50"
         >
           {creating ? "Creating…" : "Create meeting"}
         </button>
@@ -415,7 +415,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
               e.preventDefault();
               joinWithCode();
             }}
-            className="rounded-2xl glass-teal text-cream px-4 py-2 text-sm font-semibold"
+            className="rounded-xl border-2 border-teal text-teal px-4 py-2 text-sm font-semibold hover:bg-teal/5"
           >
             Join
           </button>
@@ -546,10 +546,10 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
             <button
               type="button"
               onClick={() => setVoiceType("female")}
-              className={`flex-1 rounded-2xl px-3 py-2 text-sm font-medium ${
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 voiceType === "female"
-                  ? "glass-teal text-cream"
-                  : "glass-teal text-cream opacity-50"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
               }`}
             >
               Female
@@ -557,10 +557,10 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
             <button
               type="button"
               onClick={() => setVoiceType("male")}
-              className={`flex-1 rounded-2xl px-3 py-2 text-sm font-medium ${
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 voiceType === "male"
-                  ? "glass-teal text-cream"
-                  : "glass-teal text-cream opacity-50"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
               }`}
             >
               Male
@@ -572,7 +572,7 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
           type="button"
           onClick={enterRoom}
           disabled={effectiveRoom.length < 10}
-          className="w-full rounded-2xl glass-teal text-cream py-3 text-sm font-semibold disabled:opacity-50"
+          className="w-full rounded-xl bg-teal text-cream py-3 text-sm font-semibold hover:bg-teal-dark disabled:opacity-50"
         >
           Join meeting
         </button>
@@ -1038,14 +1038,14 @@ function CallView({ room, mode, onLeave }) {
             <button
               type="button"
               onClick={copyCode}
-              className="rounded-2xl glass-teal text-cream px-4 py-2 text-xs font-semibold"
+              className="rounded-full border border-teal text-teal px-4 py-2 text-xs font-semibold"
             >
               Copy code
             </button>
             <button
               type="button"
               onClick={copyLink}
-              className="rounded-2xl glass-teal text-cream px-4 py-2 text-xs font-semibold"
+              className="rounded-full bg-teal text-cream px-4 py-2 text-xs font-semibold"
             >
               Copy invite link
             </button>
@@ -1097,21 +1097,21 @@ function CallView({ room, mode, onLeave }) {
         <button
           type="button"
           onClick={() => setMicOn((m) => !m)}
-          className={`rounded-2xl px-4 py-2 text-sm font-medium ${micOn ? "glass-teal text-cream" : "glass-teal text-cream opacity-50"}`}
+          className={`rounded-full px-4 py-2 text-sm font-medium ${micOn ? "bg-teal text-cream" : "bg-ink/10 text-ink"}`}
         >
           {micOn ? "Mic on" : "Mic off"}
         </button>
         <button
           type="button"
           onClick={() => setCamOn((c) => !c)}
-          className={`rounded-2xl px-4 py-2 text-sm font-medium ${camOn ? "glass-teal text-cream" : "glass-teal text-cream opacity-50"}`}
+          className={`rounded-full px-4 py-2 text-sm font-medium ${camOn ? "bg-teal text-cream" : "bg-ink/10 text-ink"}`}
         >
           {camOn ? "Camera on" : "Camera off"}
         </button>
         <button
           type="button"
           onClick={toggleScreenShare}
-          className={`rounded-2xl px-4 py-2 text-sm font-medium ${screenSharing ? "glass-teal text-cream opacity-80" : "glass-teal text-cream"}`}
+          className={`rounded-full px-4 py-2 text-sm font-medium ${screenSharing ? "bg-red-600 text-white" : "border border-teal text-teal"}`}
         >
           {screenSharing ? "Stop share" : "Share screen"}
         </button>
@@ -1119,7 +1119,7 @@ function CallView({ room, mode, onLeave }) {
           <button
             type="button"
             onClick={copyLink}
-            className="rounded-2xl glass-teal text-cream px-4 py-2 text-sm font-medium"
+            className="rounded-full border border-teal text-teal px-4 py-2 text-sm font-medium"
           >
             Copy invite link
           </button>
@@ -1127,7 +1127,7 @@ function CallView({ room, mode, onLeave }) {
         <button
           type="button"
           onClick={leave}
-          className="rounded-2xl glass-teal text-cream px-4 py-2 text-sm font-semibold"
+          className="rounded-full bg-red-700 text-white px-4 py-2 text-sm font-semibold"
         >
           Leave
         </button>
