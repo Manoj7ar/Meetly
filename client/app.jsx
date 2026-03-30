@@ -151,6 +151,48 @@ function MeetingEnded({ transcripts, summary, onGoHome }) {
   );
 }
 
+async function blobToWav(blob) {
+  const arrayBuf = await blob.arrayBuffer();
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  let decoded;
+  try {
+    decoded = await audioCtx.decodeAudioData(arrayBuf);
+  } catch {
+    audioCtx.close();
+    return null;
+  }
+  audioCtx.close();
+  const sampleRate = 16000;
+  const offCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * sampleRate), sampleRate);
+  const src = offCtx.createBufferSource();
+  src.buffer = decoded;
+  src.connect(offCtx.destination);
+  src.start();
+  const rendered = await offCtx.startRendering();
+  const pcm = rendered.getChannelData(0);
+  const wavBuf = new ArrayBuffer(44 + pcm.length * 2);
+  const view = new DataView(wavBuf);
+  const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + pcm.length * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, "data");
+  view.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) {
+    const s = Math.max(-1, Math.min(1, pcm[i]));
+    view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return wavBuf;
+}
+
 function getPath() {
   return window.location.pathname.replace(/\/+$/, "") || "/";
 }
@@ -921,39 +963,26 @@ function CallView({ room, mode, onLeave }) {
     const aStream = new MediaStream([atrack]);
     const CHUNK_MS = 2500;
 
-    const silenceCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const silenceSource = silenceCtx.createMediaStreamSource(aStream);
-    const silenceAnalyser = silenceCtx.createAnalyser();
-    silenceAnalyser.fftSize = 256;
-    silenceSource.connect(silenceAnalyser);
-    const silenceData = new Uint8Array(silenceAnalyser.frequencyBinCount);
-    let peakLevel = 0;
-
-    const checkSpeech = () => {
-      silenceAnalyser.getByteTimeDomainData(silenceData);
-      for (let i = 0; i < silenceData.length; i++) {
-        const v = Math.abs(silenceData[i] - 128);
-        if (v > peakLevel) peakLevel = v;
-      }
-    };
-    const speechCheckInterval = setInterval(checkSpeech, 50);
-
     const startRecordingCycle = () => {
       const cycle = () => {
         if (!wsRef.current || wsRef.current.readyState !== 1) return;
-        peakLevel = 0;
         const r = new MediaRecorder(aStream, { mimeType: mime });
         recRef.current = r;
         const chunks = [];
         r.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
-        r.onstop = () => {
-          if (!micOnRef.current || chunks.length === 0) return;
-          if (peakLevel < 5) return;
+        r.onstop = async () => {
+          if (!micOnRef.current || playBusyRef.current || chunks.length === 0) return;
           const blob = new Blob(chunks, { type: mime });
-          if (blob.size > 0 && wsRef.current && wsRef.current.readyState === 1) {
-            wsRef.current.send(blob);
+          if (blob.size === 0 || !wsRef.current || wsRef.current.readyState !== 1) return;
+          try {
+            const wav = await blobToWav(blob);
+            if (wav && wsRef.current && wsRef.current.readyState === 1) {
+              wsRef.current.send(wav);
+            }
+          } catch (e) {
+            console.warn("wav convert", e);
           }
         };
         r.start();
