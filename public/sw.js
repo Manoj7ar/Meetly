@@ -1,4 +1,4 @@
-const CACHE = "meetly-v5";
+const CACHE = "meetly-v6";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

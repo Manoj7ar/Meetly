@@ -77,17 +77,18 @@ The empty `ELEVENLABS_KEY` entry in `wrangler.jsonc` exists for typing and local
 
 ### Frontend on Vercel (optional)
 
-Meetly’s **API, WebSockets, AI, and Durable Objects** stay on **Cloudflare**. Vercel can host **only the static UI** (`public/` after `npm run build`).
+Meetly’s **API, WebSockets, AI, and Durable Objects** stay on **Cloudflare**. Vercel hosts **only the static UI**.
 
-1. Add a **`vercel.json`** at the repo root (already included): build `npm run build`, output **`public`**, SPA rewrite to **`/index.html`** so routes like `/join` and `/MEETLY-…` load the app.
-2. In the Vercel project, set a **build environment variable**  
-   **`MEETLY_API_ORIGIN`** = your Worker URL with **no** trailing slash, e.g. `https://meetly.your-subdomain.workers.dev`.  
-   Each build runs `scripts/write-meetly-env.mjs`, which writes `public/meetly-env.js` so the browser calls the Worker for `POST /api/room`, meta, and `wss://…/call`.
-3. **Redeploy the Worker** after updating to this repo version so **CORS** is enabled on the HTTP API (required for cross-origin fetches from `*.vercel.app`).
+1. **Root Directory** in the Vercel project must be the **repository root** (where `vercel.json` lives). If you previously set a custom **Output Directory** or **Build Command** in the dashboard, **clear them** so `vercel.json` is the source of truth—or set them explicitly to **`dist`** and **`npm run vercel-build`**.
+2. The repo **`vercel.json`** runs **`npm run vercel-build`**, which builds the client into **`public/`**, then mirrors everything into **`dist/`** for deployment. **Output Directory is `dist`**, not `public`, so Vercel always uploads a complete static tree (avoids empty or wrong deploys that show a platform **404**).
+3. Set **`MEETLY_API_ORIGIN`** (Production + Preview) to your Worker URL, **no** trailing slash, e.g. `https://meetly.your-subdomain.workers.dev`. That value is baked into **`meetly-env.js`** at build time so the browser calls Cloudflare for **`POST /api/room`**, meta, and **`wss://…/call`**.
+4. **Redeploy the Worker** so **CORS** on the HTTP API matches your Vercel origin.
 
 If `MEETLY_API_ORIGIN` is unset, the UI uses `window.location.origin` (normal **Cloudflare-only** deploy).
 
-**Do not** use a catch-all rewrite to `index.html` for this app on Vercel: it would rewrite **`POST /api/room`** to the HTML document and the edge returns **HTTP 405**. The included `vercel.json` only rewrites **`/join`** and **`/MEETLY-…`** room paths.
+**Do not** use a catch-all rewrite to `index.html`: it would send **`POST /api/room`** to the HTML document (**HTTP 405**). Only **`/join`** and **`/MEETLY-…`** are rewritten.
+
+**Still seeing `{"error":{"code":"404",…}}` on Vercel?** Check **Deployment Protection** (private deployments return 404 to unauthenticated visitors), confirm the latest deployment **Build Logs** show `vercel-build` and **`sync-dist-for-vercel`**, and confirm **`MEETLY_API_ORIGIN`** is set if you are not hosting the API on the same hostname.
 
 ## HTTP and WebSocket endpoints
 
@@ -109,6 +110,7 @@ Room paths in the SPA follow `/<MEETLY-CODE>`; guests are directed through `/joi
 | Script | Purpose |
 |--------|---------|
 | `npm run build:client` | Bundle `client/app.jsx` → `public/app.js` |
+| `npm run vercel-build` | Build client + mirror `public/` → `dist/` (Vercel) |
 | `npm run dev` | `wrangler dev` (client built via `predev`) |
 | `npm run deploy` | Build client + `wrangler deploy` |
 | `npm run types` | Generate Wrangler / Worker types |

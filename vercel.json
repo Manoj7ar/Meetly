@@ -1,12 +1,22 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build",
-  "outputDirectory": "public",
-  "framework": null,
+  "buildCommand": "npm run vercel-build",
+  "installCommand": "npm install",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/join", "destination": "/index.html" },
     { "source": "/join/", "destination": "/index.html" },
     { "source": "/MEETLY-:code", "destination": "/index.html" },
     { "source": "/MEETLY-:code/", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/meetly-env.js",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    },
+    {
+      "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    }
   ]
 }

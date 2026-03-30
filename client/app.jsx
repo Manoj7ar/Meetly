@@ -27,6 +27,36 @@ function apiOrigin() {
   return window.location.origin;
 }
 
+function staticHostMissingWorkerUrl() {
+  if (typeof window === "undefined") return false;
+  const raw = window.__MEETLY_API_ORIGIN__;
+  if (typeof raw === "string" && raw.trim()) return false;
+  const h = window.location.hostname;
+  return h.endsWith(".vercel.app") || h.endsWith(".now.sh");
+}
+
+function StaticHostConfigWarning() {
+  if (!staticHostMissingWorkerUrl()) return null;
+  return (
+    <div
+      role="alert"
+      className="bg-amber-100 border-b border-amber-300 text-amber-950 text-xs px-3 py-2.5 text-center leading-relaxed"
+    >
+      This static deploy has no <strong>MEETLY_API_ORIGIN</strong>. Add it in Vercel → Settings → Environment Variables (your Cloudflare Worker URL,
+      no trailing slash), then redeploy. Otherwise create/join and calls cannot reach the API.
+    </div>
+  );
+}
+
+function AppShell({ children }) {
+  return (
+    <>
+      <StaticHostConfigWarning />
+      {children}
+    </>
+  );
+}
+
 function langLabel(code) {
   return LANGS.find((l) => l.code === code)?.label || code;
 }
@@ -749,10 +779,12 @@ function App() {
 
   if (path === "/join") {
     return (
-      <JoinLobby
-        onEnterRoom={(code) => go("/" + code)}
-        onGoHome={() => go("/")}
-      />
+      <AppShell>
+        <JoinLobby
+          onEnterRoom={(code) => go("/" + code)}
+          onGoHome={() => go("/")}
+        />
+      </AppShell>
     );
   }
 
@@ -762,22 +794,30 @@ function App() {
     const role = sessionStorage.getItem("meetly_role");
     if (!role) {
       window.location.replace("/join?code=" + encodeURIComponent(room));
-      return null;
+      return (
+        <AppShell>
+          <p className="text-center text-sm text-ink/60 p-8">Redirecting…</p>
+        </AppShell>
+      );
     }
     return (
-      <CallView
-        room={room}
-        mode={role === "host" ? "host" : "guest"}
-        onLeave={() => go("/")}
-      />
+      <AppShell>
+        <CallView
+          room={room}
+          mode={role === "host" ? "host" : "guest"}
+          onLeave={() => go("/")}
+        />
+      </AppShell>
     );
   }
 
   return (
-    <Landing
-      onRoomCreated={(room) => go("/" + room)}
-      onGoToJoin={(code) => go("/join?code=" + encodeURIComponent(code))}
-    />
+    <AppShell>
+      <Landing
+        onRoomCreated={(room) => go("/" + room)}
+        onGoToJoin={(code) => go("/join?code=" + encodeURIComponent(code))}
+      />
+    </AppShell>
   );
 }
 
