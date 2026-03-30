@@ -921,27 +921,9 @@ function CallView({ room, mode, onLeave }) {
     const aStream = new MediaStream([atrack]);
     const CHUNK_MS = 2500;
 
-    const silenceCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const silenceSource = silenceCtx.createMediaStreamSource(aStream);
-    const silenceAnalyser = silenceCtx.createAnalyser();
-    silenceAnalyser.fftSize = 256;
-    silenceSource.connect(silenceAnalyser);
-    const silenceData = new Uint8Array(silenceAnalyser.frequencyBinCount);
-    let peakLevel = 0;
-
-    const checkSpeech = () => {
-      silenceAnalyser.getByteTimeDomainData(silenceData);
-      for (let i = 0; i < silenceData.length; i++) {
-        const v = Math.abs(silenceData[i] - 128);
-        if (v > peakLevel) peakLevel = v;
-      }
-    };
-    const speechCheckInterval = setInterval(checkSpeech, 50);
-
     const startRecordingCycle = () => {
       const cycle = () => {
         if (!wsRef.current || wsRef.current.readyState !== 1) return;
-        peakLevel = 0;
         const r = new MediaRecorder(aStream, { mimeType: mime });
         recRef.current = r;
         const chunks = [];
@@ -949,8 +931,7 @@ function CallView({ room, mode, onLeave }) {
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
         r.onstop = () => {
-          if (!micOnRef.current || chunks.length === 0) return;
-          if (peakLevel < 5) return;
+          if (!micOnRef.current || playBusyRef.current || chunks.length === 0) return;
           const blob = new Blob(chunks, { type: mime });
           if (blob.size > 0 && wsRef.current && wsRef.current.readyState === 1) {
             wsRef.current.send(blob);
