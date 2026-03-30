@@ -458,6 +458,8 @@ function CallView({ room, mode, onLeave }) {
   const [err, setErr] = useState("");
   const [remotePeerName, setRemotePeerName] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  const [transcripts, setTranscripts] = useState([]);
+  const transcriptEndRef = useRef(null);
 
   const localName = sessionStorage.getItem("meetly_display_name") || (mode === "host" ? "Host" : "Guest");
 
@@ -689,6 +691,13 @@ function CallView({ room, mode, onLeave }) {
         setTimeout(() => setAnnouncement(""), 6000);
         return;
       }
+      if (msg.type === "transcript") {
+        setTranscripts((prev) => [
+          ...prev.slice(-50),
+          { id: Date.now() + Math.random(), from: msg.from, name: msg.name, text: msg.text },
+        ]);
+        return;
+      }
       if (msg.type === "error") {
         setErr(msg.message || "Error");
         return;
@@ -760,6 +769,12 @@ function CallView({ room, mode, onLeave }) {
     const v = streamRef.current.getVideoTracks()[0];
     if (v) v.enabled = camOn;
   }, [camOn]);
+
+  useEffect(() => {
+    if (transcriptEndRef.current) {
+      transcriptEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [transcripts]);
 
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.origin + "/join?code=" + encodeURIComponent(room));
@@ -857,6 +872,40 @@ function CallView({ room, mode, onLeave }) {
         >
           Leave
         </button>
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-black border-2 border-black overflow-hidden" style={{ minHeight: "160px", maxHeight: "260px" }}>
+        <div className="px-4 py-2 border-b border-white/10 flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-[10px] uppercase tracking-widest text-white/50 font-medium">Live Transcription</span>
+        </div>
+        <div className="px-4 py-3 overflow-y-auto flex flex-col gap-2" style={{ maxHeight: "200px" }}>
+          {transcripts.length === 0 && (
+            <p className="text-white/30 text-xs text-center py-4">Transcription will appear here as you speak...</p>
+          )}
+          {transcripts.map((t) => (
+            <div
+              key={t.id}
+              className={`flex flex-col ${t.from === "self" ? "items-end" : "items-start"}`}
+            >
+              <span className={`text-[10px] uppercase tracking-wide mb-0.5 ${
+                t.from === "self" ? "text-white/40" : "text-green-400/70"
+              }`}>
+                {t.from === "self" ? "You" : t.name}
+              </span>
+              <span
+                className={`inline-block px-3 py-1.5 rounded-2xl text-sm max-w-[85%] ${
+                  t.from === "self"
+                    ? "bg-white/10 text-white"
+                    : "bg-green-500 text-black font-medium"
+                }`}
+              >
+                {t.text}
+              </span>
+            </div>
+          ))}
+          <div ref={transcriptEndRef} />
+        </div>
       </div>
     </div>
   );
