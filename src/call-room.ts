@@ -225,6 +225,13 @@ export class CallRoom extends DurableObject<Env> {
     }
     if (!text) return;
 
+    ws.send(JSON.stringify({
+      type: "transcript",
+      from: "self",
+      name: speaker.displayName,
+      text,
+    }));
+
     let translated: string;
     try {
       translated = await translateText(this.env, text, speaker.speakLang, other.hearLang);
@@ -234,6 +241,13 @@ export class CallRoom extends DurableObject<Env> {
       return;
     }
     if (!translated) return;
+
+    other.ws.send(JSON.stringify({
+      type: "transcript",
+      from: "peer",
+      name: speaker.displayName,
+      text: translated,
+    }));
 
     try {
       const audio = await elevenLabsTts(this.env, translated, speaker.voiceType);
