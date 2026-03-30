@@ -3,9 +3,7 @@
   "name": "meetly",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-30",
-  "vars": {
-    "ELEVENLABS_KEY": ""
-  },
+  // ELEVENLABS_KEY is set via `wrangler secret put` — do not add it as a plain var.
   "ai": {
     "binding": "AI"
   },
