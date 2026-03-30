@@ -28,25 +28,6 @@
     html, body, #root { height: 100%; margin: 0; }
     body { background: #FFFDF5; color: #2D2D2D; }
     video { object-fit: cover; }
-    .glass-teal {
-      background: #0F4C5C;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      box-shadow: 0 4px 20px rgba(15, 76, 92, 0.35), inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.1);
-      transition: all 0.2s ease;
-      position: relative;
-      overflow: hidden;
-    }
-    .glass-teal::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 50%;
-      background: linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0));
-      pointer-events: none;
-      border-radius: inherit;
-    }
-    .glass-teal:hover { background: #0a3a46; box-shadow: 0 6px 24px rgba(15, 76, 92, 0.45), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.1); }
-    .glass-teal:active { transform: scale(0.97); }
   </style>
 </head>
 <body class="bg-cream text-ink antialiased">
