@@ -1,10 +1,11 @@
 import { toM2mLang, voiceIdForSpeaker, ANNOUNCE_VOICE } from "./lang.js";
 
+const FLASH_MODEL = "eleven_flash_v2_5";
+
 export async function transcribe(env: Env, audioBytes: Uint8Array): Promise<string> {
   if (audioBytes.byteLength < 200) return "";
-  const audio = Array.from(audioBytes);
   const res = (await env.AI.run("@cf/openai/whisper", {
-    audio,
+    audio: [...audioBytes],
   })) as { text?: string };
   const text = (res.text ?? "").trim();
   if (text.length < 2) return "";
@@ -29,29 +30,24 @@ export async function translateText(
   return (res.translated_text ?? text).trim();
 }
 
-export async function elevenLabsTts(
+async function ttsRequest(
   env: Env,
+  voiceId: string,
   text: string,
-  voiceType: string
+  stability: number,
+  similarityBoost: number,
 ): Promise<ArrayBuffer | null> {
-  if (!text || !env.ELEVENLABS_KEY) return null;
-  const voice_id = voiceIdForSpeaker(voiceType);
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`, {
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?optimize_streaming_latency=4&output_format=mp3_22050_32`;
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "xi-api-key": env.ELEVENLABS_KEY,
       "Content-Type": "application/json",
-      Accept: "audio/mpeg",
     },
     body: JSON.stringify({
       text,
-      model_id: "eleven_turbo_v2_5",
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.8,
-        style: 0,
-        use_speaker_boost: true,
-      },
+      model_id: FLASH_MODEL,
+      voice_settings: { stability, similarity_boost: similarityBoost, style: 0, use_speaker_boost: false },
     }),
   });
   if (!res.ok) {
@@ -61,32 +57,19 @@ export async function elevenLabsTts(
   return res.arrayBuffer();
 }
 
+export async function elevenLabsTts(
+  env: Env,
+  text: string,
+  voiceType: string
+): Promise<ArrayBuffer | null> {
+  if (!text || !env.ELEVENLABS_KEY) return null;
+  return ttsRequest(env, voiceIdForSpeaker(voiceType), text, 0.5, 0.8);
+}
+
 export async function announceTts(
   env: Env,
   text: string
 ): Promise<ArrayBuffer | null> {
   if (!text || !env.ELEVENLABS_KEY) return null;
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ANNOUNCE_VOICE}`, {
-    method: "POST",
-    headers: {
-      "xi-api-key": env.ELEVENLABS_KEY,
-      "Content-Type": "application/json",
-      Accept: "audio/mpeg",
-    },
-    body: JSON.stringify({
-      text,
-      model_id: "eleven_turbo_v2_5",
-      voice_settings: {
-        stability: 0.7,
-        similarity_boost: 0.9,
-        style: 0,
-        use_speaker_boost: true,
-      },
-    }),
-  });
-  if (!res.ok) {
-    console.error("Announce TTS error", res.status, await res.text());
-    return null;
-  }
-  return res.arrayBuffer();
+  return ttsRequest(env, ANNOUNCE_VOICE, text, 0.7, 0.9);
 }
