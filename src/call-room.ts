@@ -174,6 +174,10 @@ export class CallRoom extends DurableObject<Env> {
         }
         return;
       }
+      if (parsed.type === "end-meeting") {
+        this.ctx.waitUntil(this.endMeetingForAll());
+        return;
+      }
       if (parsed.type === "ping") {
         ws.send(JSON.stringify({ type: "pong" }));
       }
@@ -264,6 +268,27 @@ export class CallRoom extends DurableObject<Env> {
         console.error("tts error", e);
       }
     })());
+  }
+
+  private async endMeetingForAll(): Promise<void> {
+    const all = [...this.participants.values()];
+    const summary = this.transcriptLog.length >= 2 ? await this.generateSummary() : "";
+
+    for (const p of all) {
+      try {
+        if (summary) {
+          p.ws.send(JSON.stringify({ type: "meeting-summary", summary }));
+        }
+        p.ws.send(JSON.stringify({ type: "meeting-ended-all" }));
+        p.ws.close(1000, "meeting ended");
+      } catch { /* ignore */ }
+    }
+
+    this.participants.clear();
+    this.wsToId.clear();
+    this.resetRoomState();
+    this.transcriptLog = [];
+    await this.ctx.storage.deleteAlarm();
   }
 
   private async generateSummary(): Promise<string> {

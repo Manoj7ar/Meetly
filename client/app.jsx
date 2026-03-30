@@ -720,6 +720,13 @@ function CallView({ room, mode, onLeave }) {
     setMeetingEnded(true);
   }, [teardown, startOnceKey]);
 
+  const endMeetingForAll = useCallback(() => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: "end-meeting" }));
+    }
+  }, []);
+
   const startCall = useCallback(async () => {
     if (sessionStorage.getItem(startOnceKey)) return;
     sessionStorage.setItem(startOnceKey, "1");
@@ -888,6 +895,13 @@ function CallView({ room, mode, onLeave }) {
         setMeetingSummary(msg.summary || "");
         return;
       }
+      if (msg.type === "meeting-ended-all") {
+        sessionStorage.removeItem(startOnceKey);
+        teardown();
+        sessionStorage.removeItem("meetly_role");
+        setMeetingEnded(true);
+        return;
+      }
       if (msg.type === "error") {
         setErr(msg.message || "Error");
         return;
@@ -905,11 +919,29 @@ function CallView({ room, mode, onLeave }) {
     let mime = "audio/webm;codecs=opus";
     if (!MediaRecorder.isTypeSupported(mime)) mime = "audio/webm";
     const aStream = new MediaStream([atrack]);
-    const CHUNK_MS = 2000;
+    const CHUNK_MS = 2500;
+
+    const silenceCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const silenceSource = silenceCtx.createMediaStreamSource(aStream);
+    const silenceAnalyser = silenceCtx.createAnalyser();
+    silenceAnalyser.fftSize = 512;
+    silenceSource.connect(silenceAnalyser);
+    const silenceData = new Uint8Array(silenceAnalyser.frequencyBinCount);
+    let speechDetected = false;
+
+    const checkSpeech = () => {
+      silenceAnalyser.getByteFrequencyData(silenceData);
+      let sum = 0;
+      for (let i = 0; i < silenceData.length; i++) sum += silenceData[i];
+      const avg = sum / silenceData.length;
+      if (avg > 12) speechDetected = true;
+    };
+    const speechCheckInterval = setInterval(checkSpeech, 100);
 
     const startRecordingCycle = () => {
       const cycle = () => {
         if (!wsRef.current || wsRef.current.readyState !== 1) return;
+        speechDetected = false;
         const r = new MediaRecorder(aStream, { mimeType: mime });
         recRef.current = r;
         const chunks = [];
@@ -917,7 +949,7 @@ function CallView({ room, mode, onLeave }) {
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
         r.onstop = () => {
-          if (!micOnRef.current || chunks.length === 0) return;
+          if (!micOnRef.current || chunks.length === 0 || !speechDetected) return;
           const blob = new Blob(chunks, { type: mime });
           if (blob.size > 0 && wsRef.current && wsRef.current.readyState === 1) {
             wsRef.current.send(blob);
@@ -1131,6 +1163,15 @@ function CallView({ room, mode, onLeave }) {
         >
           Leave
         </button>
+        {remotePeerName && (
+          <button
+            type="button"
+            onClick={endMeetingForAll}
+            className="rounded-full bg-red-900 text-white px-4 py-2 text-sm font-semibold"
+          >
+            End for all
+          </button>
+        )}
       </div>
 
       <div className="mt-4 rounded-2xl bg-black border-2 border-black overflow-hidden" style={{ minHeight: "160px", maxHeight: "260px" }}>
