@@ -11,11 +11,16 @@ function makeRoomCode(): string {
   return s;
 }
 
+function isValidRoomCode(code: string): boolean {
+  return code.startsWith(ROOM_PREFIX) && code.length <= 40;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const pathNorm = url.pathname.replace(/\/+$/, "") || "/";
 
-    if (url.pathname === "/api/room" && request.method === "POST") {
+    if (pathNorm === "/api/room" && request.method === "POST") {
       const code = makeRoomCode();
       const origin = url.origin;
       return Response.json({
@@ -25,12 +30,23 @@ export default {
       });
     }
 
+    const metaMatch = pathNorm.match(/^\/api\/room\/(MEETLY-[A-Z0-9-]+)\/meta$/);
+    if (request.method === "GET" && metaMatch) {
+      const code = metaMatch[1]!;
+      if (!isValidRoomCode(code)) {
+        return new Response("Invalid room", { status: 400 });
+      }
+      const id = env.CALL_ROOM.idFromName(code);
+      const stub = env.CALL_ROOM.get(id);
+      return stub.fetch(new Request("https://internal/__meta", { method: "GET" }));
+    }
+
     if (url.pathname === "/call") {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("WebSocket upgrade required", { status: 426 });
       }
       const room = url.searchParams.get("room") ?? "";
-      if (!room.startsWith(ROOM_PREFIX) || room.length > 40) {
+      if (!isValidRoomCode(room)) {
         return new Response("Invalid room", { status: 400 });
       }
       const id = env.CALL_ROOM.idFromName(room);
