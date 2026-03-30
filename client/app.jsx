@@ -74,6 +74,83 @@ function ConnQualityDot({ quality }) {
   );
 }
 
+function QrCode({ url, size = 140 }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    const s = size;
+    c.width = s; c.height = s;
+    ctx.fillStyle = "#FFFDF5";
+    ctx.fillRect(0, 0, s, s);
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${s}x${s}&data=${encodeURIComponent(url)}&bgcolor=FFFDF5&color=0F4C5C`;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => ctx.drawImage(img, 0, 0, s, s);
+    img.src = qrUrl;
+  }, [url, size]);
+  return <canvas ref={canvasRef} className="rounded-lg border border-teal/20" style={{ width: size, height: size }} />;
+}
+
+function formatElapsed(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function MeetingEnded({ transcripts, summary, onGoHome }) {
+  return (
+    <div className="min-h-full flex flex-col items-center px-4 py-10">
+      <h1 className="text-2xl font-semibold text-teal mb-1">Meeting ended</h1>
+      <p className="text-sm text-ink/60 mb-6">Here's a summary of your conversation.</p>
+
+      {summary && (
+        <div className="w-full max-w-lg bg-offwhite rounded-2xl shadow-sm border border-teal/10 p-5 mb-4">
+          <p className="text-xs font-medium text-teal uppercase tracking-wide mb-2">AI Summary</p>
+          <p className="text-sm text-ink leading-relaxed">{summary}</p>
+        </div>
+      )}
+      {!summary && transcripts.length > 0 && (
+        <div className="w-full max-w-lg bg-offwhite rounded-2xl shadow-sm border border-teal/10 p-5 mb-4">
+          <p className="text-xs font-medium text-teal uppercase tracking-wide mb-2">AI Summary</p>
+          <p className="text-sm text-ink/50 italic">Generating summary...</p>
+        </div>
+      )}
+
+      {transcripts.length > 0 && (
+        <div className="w-full max-w-lg bg-black rounded-2xl border-2 border-black overflow-hidden mb-4" style={{ maxHeight: "300px" }}>
+          <div className="px-4 py-2 border-b border-white/10">
+            <span className="text-[10px] uppercase tracking-widest text-white/50 font-medium">Transcript</span>
+          </div>
+          <div className="px-4 py-3 overflow-y-auto flex flex-col gap-2" style={{ maxHeight: "250px" }}>
+            {transcripts.map((t) => (
+              <div key={t.id} className={`flex flex-col ${t.from === "self" ? "items-end" : "items-start"}`}>
+                <span className={`text-[10px] uppercase tracking-wide mb-0.5 ${t.from === "self" ? "text-white/40" : "text-green-400/70"}`}>
+                  {t.from === "self" ? "You" : t.name}
+                </span>
+                <span className={`inline-block px-3 py-1.5 rounded-2xl text-sm max-w-[85%] ${
+                  t.from === "self" ? "bg-white/10 text-white" : "bg-green-500 text-black font-medium"
+                }`}>
+                  {t.text}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onGoHome}
+        className="rounded-xl bg-teal text-cream px-6 py-3 text-sm font-semibold hover:bg-teal-dark"
+      >
+        Back to home
+      </button>
+    </div>
+  );
+}
+
 function getPath() {
   return window.location.pathname.replace(/\/+$/, "") || "/";
 }
@@ -521,7 +598,10 @@ function CallView({ room, mode, onLeave }) {
   const [screenSharing, setScreenSharing] = useState(false);
   const [connQuality, setConnQuality] = useState("unknown");
   const [detectedLang, setDetectedLang] = useState("");
+  const [elapsed, setElapsed] = useState(0);
+  const [meetingSummary, setMeetingSummary] = useState(null);
   const screenTrackRef = useRef(null);
+  const timerRef = useRef(null);
 
   const localName = sessionStorage.getItem("meetly_display_name") || (mode === "host" ? "Host" : "Guest");
 
@@ -612,6 +692,7 @@ function CallView({ room, mode, onLeave }) {
   );
 
   const teardown = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     try {
       if (recRef.current) recRef.current.stop();
     } catch (_) {}
@@ -630,13 +711,14 @@ function CallView({ room, mode, onLeave }) {
     remoteDescSetRef.current = false;
   }, []);
 
+  const [meetingEnded, setMeetingEnded] = useState(false);
+
   const leave = useCallback(() => {
     sessionStorage.removeItem(startOnceKey);
     teardown();
     sessionStorage.removeItem("meetly_role");
-    if (onLeave) onLeave();
-    else window.location.href = "/";
-  }, [teardown, startOnceKey, onLeave]);
+    setMeetingEnded(true);
+  }, [teardown, startOnceKey]);
 
   const startCall = useCallback(async () => {
     if (sessionStorage.getItem(startOnceKey)) return;
@@ -717,6 +799,7 @@ function CallView({ room, mode, onLeave }) {
     ws.onopen = () => {
       setStatus("Connected");
       playChime("connect");
+      timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
       ws.send(
         JSON.stringify({
           type: "join",
@@ -799,6 +882,10 @@ function CallView({ room, mode, onLeave }) {
           ...prev.slice(-50),
           { id: Date.now() + Math.random(), from: msg.from, name: msg.name, text: msg.text, pronunciation: msg.pronunciation || "" },
         ]);
+        return;
+      }
+      if (msg.type === "meeting-summary") {
+        setMeetingSummary(msg.summary || "");
         return;
       }
       if (msg.type === "error") {
@@ -927,13 +1014,27 @@ function CallView({ room, mode, onLeave }) {
 
   const remoteLabel = remotePeerName || "Guest";
 
+  if (meetingEnded) {
+    return (
+      <MeetingEnded
+        transcripts={transcripts}
+        summary={meetingSummary}
+        onGoHome={onLeave || (() => { window.location.href = "/"; })}
+      />
+    );
+  }
+
   return (
     <div className="min-h-full flex flex-col px-3 py-4 pb-8 max-w-3xl mx-auto w-full">
       {mode === "host" && (
         <div className="mb-4 rounded-2xl border border-teal/20 bg-offwhite p-4 text-center">
           <p className="text-xs uppercase tracking-wide text-teal font-medium mb-1">Share with friends</p>
           <p className="text-lg font-mono font-semibold text-ink break-all">{room}</p>
-          <div className="flex flex-wrap gap-2 justify-center mt-3">
+          <div className="flex justify-center mt-3 mb-3">
+            <QrCode url={window.location.origin + "/join?code=" + encodeURIComponent(room)} size={120} />
+          </div>
+          <p className="text-[10px] text-ink/40 mb-2">Scan to join from another device</p>
+          <div className="flex flex-wrap gap-2 justify-center">
             <button
               type="button"
               onClick={copyCode}
@@ -953,7 +1054,12 @@ function CallView({ room, mode, onLeave }) {
       )}
 
       <div className="flex justify-between items-center mb-3">
-        <span className="text-xs font-mono text-teal truncate max-w-[55%]">{room}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono text-teal truncate max-w-[45vw]">{room}</span>
+          {elapsed > 0 && (
+            <span className="text-[10px] font-mono text-ink/40 bg-ink/5 px-1.5 py-0.5 rounded">{formatElapsed(elapsed)}</span>
+          )}
+        </div>
         <span className="text-xs text-ink/50">{status}</span>
       </div>
       {announcement && (
