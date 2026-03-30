@@ -149,7 +149,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
     <div className="min-h-full flex flex-col items-center px-4 py-10">
       <h1 className="text-4xl font-semibold text-teal tracking-tight mb-2">Meetly</h1>
       <p className="text-sm text-ink/70 mb-8 text-center max-w-sm">
-        Speak your language — they hear theirs. Video + translated voice.
+        Speak your language, they hear theirs. Real-time video calls with live translated voice.
       </p>
 
       <form
