@@ -353,7 +353,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
               className={`flex-1 rounded-2xl px-3 py-2 text-sm font-medium ${
                 voiceType === "female"
                   ? "glass-teal text-cream"
-                  : "glass text-ink"
+                  : "glass-teal text-cream opacity-50"
               }`}
             >
               Female
@@ -364,7 +364,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
               className={`flex-1 rounded-2xl px-3 py-2 text-sm font-medium ${
                 voiceType === "male"
                   ? "glass-teal text-cream"
-                  : "glass text-ink"
+                  : "glass-teal text-cream opacity-50"
               }`}
             >
               Male
@@ -415,7 +415,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
               e.preventDefault();
               joinWithCode();
             }}
-            className="rounded-2xl glass text-teal px-4 py-2 text-sm font-semibold"
+            className="rounded-2xl glass-teal text-cream px-4 py-2 text-sm font-semibold"
           >
             Join
           </button>
@@ -549,7 +549,7 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
               className={`flex-1 rounded-2xl px-3 py-2 text-sm font-medium ${
                 voiceType === "female"
                   ? "glass-teal text-cream"
-                  : "glass text-ink"
+                  : "glass-teal text-cream opacity-50"
               }`}
             >
               Female
@@ -560,7 +560,7 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
               className={`flex-1 rounded-2xl px-3 py-2 text-sm font-medium ${
                 voiceType === "male"
                   ? "glass-teal text-cream"
-                  : "glass text-ink"
+                  : "glass-teal text-cream opacity-50"
               }`}
             >
               Male
@@ -1038,7 +1038,7 @@ function CallView({ room, mode, onLeave }) {
             <button
               type="button"
               onClick={copyCode}
-              className="rounded-2xl glass text-teal px-4 py-2 text-xs font-semibold"
+              className="rounded-2xl glass-teal text-cream px-4 py-2 text-xs font-semibold"
             >
               Copy code
             </button>
@@ -1097,21 +1097,21 @@ function CallView({ room, mode, onLeave }) {
         <button
           type="button"
           onClick={() => setMicOn((m) => !m)}
-          className={`rounded-2xl px-4 py-2 text-sm font-medium ${micOn ? "glass-teal text-cream" : "glass-dark text-ink"}`}
+          className={`rounded-2xl px-4 py-2 text-sm font-medium ${micOn ? "glass-teal text-cream" : "glass-teal text-cream opacity-50"}`}
         >
           {micOn ? "Mic on" : "Mic off"}
         </button>
         <button
           type="button"
           onClick={() => setCamOn((c) => !c)}
-          className={`rounded-2xl px-4 py-2 text-sm font-medium ${camOn ? "glass-teal text-cream" : "glass-dark text-ink"}`}
+          className={`rounded-2xl px-4 py-2 text-sm font-medium ${camOn ? "glass-teal text-cream" : "glass-teal text-cream opacity-50"}`}
         >
           {camOn ? "Camera on" : "Camera off"}
         </button>
         <button
           type="button"
           onClick={toggleScreenShare}
-          className={`rounded-2xl px-4 py-2 text-sm font-medium ${screenSharing ? "glass-red text-white" : "glass text-teal"}`}
+          className={`rounded-2xl px-4 py-2 text-sm font-medium ${screenSharing ? "glass-teal text-cream opacity-80" : "glass-teal text-cream"}`}
         >
           {screenSharing ? "Stop share" : "Share screen"}
         </button>
@@ -1119,7 +1119,7 @@ function CallView({ room, mode, onLeave }) {
           <button
             type="button"
             onClick={copyLink}
-            className="rounded-2xl glass text-teal px-4 py-2 text-sm font-medium"
+            className="rounded-2xl glass-teal text-cream px-4 py-2 text-sm font-medium"
           >
             Copy invite link
           </button>
@@ -1127,7 +1127,7 @@ function CallView({ room, mode, onLeave }) {
         <button
           type="button"
           onClick={leave}
-          className="rounded-2xl glass-red text-white px-4 py-2 text-sm font-semibold"
+          className="rounded-2xl glass-teal text-cream px-4 py-2 text-sm font-semibold"
         >
           Leave
         </button>
