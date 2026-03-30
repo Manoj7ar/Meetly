@@ -2,6 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 import { elevenLabsTts, transcribe, translateText, announceTts } from "./pipeline.js";
 import { langLabel } from "./lang.js";
 
+const INTRO_TEXT = "Ready for live translation.";
+
 const IDLE_MS = 30 * 60 * 1000;
 const MAX_NAME = 64;
 
@@ -133,25 +135,9 @@ export class CallRoom extends DurableObject<Env> {
         );
 
         if (others.length === 0) {
-          this.ctx.waitUntil(
-            this.sendAnnouncement(
-              ws,
-              `Welcome to Meetly, ${displayName}. You're the host. ` +
-              `Your room is ready. Share the code to invite someone. ` +
-              `Live translation is standing by.`
-            )
-          );
+          this.ctx.waitUntil(this.sendAnnouncement(ws, INTRO_TEXT));
         } else {
-          const hostP = this.participants.get(others[0]);
-          const hostLang = hostP ? langLabel(hostP.speakLang) : "unknown";
-          this.ctx.waitUntil(
-            this.sendAnnouncement(
-              ws,
-              `Welcome ${displayName}. You've joined the meeting. ` +
-              `The host speaks ${hostLang}. ` +
-              `Live translation is now active. Speak naturally.`
-            )
-          );
+          ws.send(JSON.stringify({ type: "announcement", text: `Connected. Speak naturally.` }));
         }
 
         for (const oid of others) {
@@ -164,13 +150,10 @@ export class CallRoom extends DurableObject<Env> {
               displayName,
             })
           );
-          this.ctx.waitUntil(
-            this.sendAnnouncement(
-              o.ws,
-              `${displayName} has joined. They speak ${langLabel(speakLang)}. ` +
-              `Live translation is now active.`
-            )
-          );
+          o.ws.send(JSON.stringify({
+            type: "announcement",
+            text: `${displayName} joined. Translation active.`,
+          }));
         }
         return;
       }
@@ -273,9 +256,7 @@ export class CallRoom extends DurableObject<Env> {
     this.participants.delete(id);
     for (const p of this.participants.values()) {
       p.ws.send(JSON.stringify({ type: "peer-left", participantId: id }));
-      this.ctx.waitUntil(
-        this.sendAnnouncement(p.ws, `${leaveName} has left the meeting.`)
-      );
+      p.ws.send(JSON.stringify({ type: "announcement", text: `${leaveName} left.` }));
     }
     if (this.participants.size === 0) {
       await this.ctx.storage.deleteAlarm();
