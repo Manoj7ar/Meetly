@@ -10,6 +10,7 @@ type Participant = {
   speakLang: string;
   hearLang: string;
   displayName: string;
+  voiceType: string;
 };
 
 export class CallRoom extends DurableObject<Env> {
@@ -87,6 +88,7 @@ export class CallRoom extends DurableObject<Env> {
         speakLang?: string;
         hearLang?: string;
         displayName?: string;
+        voiceType?: string;
         payload?: unknown;
       };
       try {
@@ -100,6 +102,7 @@ export class CallRoom extends DurableObject<Env> {
         const hearLang = parsed.hearLang ?? "en";
         let displayName = String(parsed.displayName ?? "Guest").trim().slice(0, MAX_NAME);
         if (!displayName) displayName = "Guest";
+        const voiceType = parsed.voiceType === "male" ? "male" : "female";
 
         const isFirst = this.participants.size === 0;
         if (isFirst) {
@@ -108,7 +111,7 @@ export class CallRoom extends DurableObject<Env> {
         }
 
         this.wsToId.set(ws, id);
-        this.participants.set(id, { id, ws, speakLang, hearLang, displayName });
+        this.participants.set(id, { id, ws, speakLang, hearLang, displayName, voiceType });
         const others = [...this.participants.keys()].filter((k) => k !== id);
         const existingPeers = others.map((oid) => {
           const op = this.participants.get(oid);
@@ -233,7 +236,7 @@ export class CallRoom extends DurableObject<Env> {
     if (!translated) return;
 
     try {
-      const audio = await elevenLabsTts(this.env, translated, other.hearLang);
+      const audio = await elevenLabsTts(this.env, translated, speaker.voiceType);
       if (audio && audio.byteLength > 0) {
         other.ws.send(audio);
       }

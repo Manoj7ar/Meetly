@@ -112,6 +112,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
   const [hear, setHear] = useState("es");
   const [joinInput, setJoinInput] = useState("");
   const [hostName, setHostName] = useState("");
+  const [voiceType, setVoiceType] = useState("female");
   const [creating, setCreating] = useState(false);
   const [createErr, setCreateErr] = useState("");
 
@@ -119,6 +120,7 @@ function Landing({ onRoomCreated, onGoToJoin }) {
     setCreateErr("");
     sessionStorage.setItem("meetly_speak", speak);
     sessionStorage.setItem("meetly_hear", hear);
+    sessionStorage.setItem("meetly_voice_type", voiceType);
     const name = hostName.trim() || "Host";
     sessionStorage.setItem("meetly_display_name", name.slice(0, 64));
     sessionStorage.setItem("meetly_role", "host");
@@ -207,6 +209,34 @@ function Landing({ onRoomCreated, onGoToJoin }) {
           </label>
         </div>
 
+        <label className="block text-xs font-medium text-teal uppercase tracking-wide">
+          My voice sounds like
+          <div className="mt-1 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setVoiceType("female")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                voiceType === "female"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
+              }`}
+            >
+              Female
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceType("male")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                voiceType === "male"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
+              }`}
+            >
+              Male
+            </button>
+          </div>
+        </label>
+
         {createErr && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2" role="alert">
             {createErr}
@@ -267,6 +297,7 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
   const [codeInput, setCodeInput] = useState(initialCode.length >= 10 ? "" : "");
   const [displayName, setDisplayName] = useState("");
   const [speak, setSpeak] = useState("en");
+  const [voiceType, setVoiceType] = useState("female");
   const [meta, setMeta] = useState({ hasHost: false, hostSpeakLang: null, hostHearLang: null });
   const [metaErr, setMetaErr] = useState("");
 
@@ -307,6 +338,7 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
     sessionStorage.setItem("meetly_display_name", name);
     sessionStorage.setItem("meetly_speak", speak);
     sessionStorage.setItem("meetly_hear", speak);
+    sessionStorage.setItem("meetly_voice_type", voiceType);
     onEnterRoom(code);
   };
 
@@ -372,6 +404,33 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
               </option>
             ))}
           </select>
+        </label>
+        <label className="block text-xs font-medium text-teal uppercase tracking-wide">
+          My voice sounds like
+          <div className="mt-1 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setVoiceType("female")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                voiceType === "female"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
+              }`}
+            >
+              Female
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceType("male")}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                voiceType === "male"
+                  ? "border-teal bg-teal text-cream"
+                  : "border-teal/20 bg-cream text-ink hover:bg-teal/5"
+              }`}
+            >
+              Male
+            </button>
+          </div>
         </label>
 
         <button
@@ -554,6 +613,8 @@ function CallView({ room, mode, onLeave }) {
       ws.send(JSON.stringify({ type: "signal", payload: { sdp: { type: offer.type, sdp: offer.sdp } } }));
     };
 
+    const voiceType = sessionStorage.getItem("meetly_voice_type") || "female";
+
     ws.onopen = () => {
       setStatus("Connected");
       ws.send(
@@ -562,6 +623,7 @@ function CallView({ room, mode, onLeave }) {
           speakLang: speak,
           hearLang: hear,
           displayName: displayName.trim().slice(0, 64) || "Guest",
+          voiceType,
         })
       );
       startRecordingCycle();

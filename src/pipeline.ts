@@ -1,4 +1,4 @@
-import { toM2mLang, voiceIdForHearLang, ANNOUNCE_VOICE } from "./lang.js";
+import { toM2mLang, voiceIdForSpeaker, ANNOUNCE_VOICE } from "./lang.js";
 
 export async function transcribe(env: Env, audioBytes: Uint8Array): Promise<string> {
   if (audioBytes.byteLength < 200) return "";
@@ -32,10 +32,10 @@ export async function translateText(
 export async function elevenLabsTts(
   env: Env,
   text: string,
-  hearLangCode: string
+  voiceType: string
 ): Promise<ArrayBuffer | null> {
   if (!text || !env.ELEVENLABS_KEY) return null;
-  const voice_id = voiceIdForHearLang(hearLangCode);
+  const voice_id = voiceIdForSpeaker(voiceType);
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`, {
     method: "POST",
     headers: {
