@@ -20,6 +20,13 @@ function getPath() {
   return window.location.pathname.replace(/\/+$/, "") || "/";
 }
 
+/** When the UI is on Vercel (or any static host), set MEETLY_API_ORIGIN at build time to your Cloudflare Worker URL (no trailing slash). */
+function apiOrigin() {
+  const raw = typeof window !== "undefined" ? window.__MEETLY_API_ORIGIN__ : "";
+  if (typeof raw === "string" && raw.trim()) return raw.trim().replace(/\/$/, "");
+  return window.location.origin;
+}
+
 function langLabel(code) {
   return LANGS.find((l) => l.code === code)?.label || code;
 }
@@ -35,7 +42,7 @@ function normalizeRoomParam(raw) {
 }
 
 function wsUrlForRoom(room) {
-  const u = new URL(window.location.href);
+  const u = new URL(apiOrigin());
   u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
   u.pathname = "/call";
   u.search = "?room=" + encodeURIComponent(room);
@@ -44,7 +51,7 @@ function wsUrlForRoom(room) {
 }
 
 async function postCreateRoom() {
-  const url = new URL("/api/room", window.location.origin).href;
+  const url = new URL("/api/room", apiOrigin()).href;
   const r = await fetch(url, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
@@ -235,7 +242,7 @@ function JoinLobby({ onEnterRoom, onGoHome }) {
     const code = room || normalizeRoomParam(codeInput);
     if (code.length < 10) return;
     try {
-      const r = await fetch(new URL("/api/room/" + encodeURIComponent(code) + "/meta", window.location.origin).href);
+      const r = await fetch(new URL("/api/room/" + encodeURIComponent(code) + "/meta", apiOrigin()).href);
       const j = await r.json();
       setMeta({
         hasHost: !!j.hasHost,

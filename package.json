@@ -4,7 +4,8 @@
   "description": "1:1 video calls on Cloudflare Workers with real-time translation (Whisper, m2m100, ElevenLabs).",
   "main": "index.js",
   "scripts": {
-    "build:client": "esbuild client/app.jsx --bundle --minify --outfile=public/app.js --format=esm --jsx=automatic --jsx-import-source=react",
+    "build": "npm run build:client",
+    "build:client": "node scripts/write-meetly-env.mjs && esbuild client/app.jsx --bundle --minify --outfile=public/app.js --format=esm --jsx=automatic --jsx-import-source=react",
     "predev": "npm run build:client",
     "dev": "wrangler dev",
     "deploy": "npm run build:client && wrangler deploy",

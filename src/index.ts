@@ -15,30 +15,57 @@ function isValidRoomCode(code: string): boolean {
   return code.startsWith(ROOM_PREFIX) && code.length <= 40;
 }
 
+/** Lets the static UI (e.g. Vercel) call the Worker API cross-origin. */
+const CORS_API: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Accept",
+  "Access-Control-Max-Age": "86400",
+};
+
+function withApiCors(res: Response): Response {
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries(CORS_API)) h.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
+function jsonWithCors(data: unknown, init?: ResponseInit): Response {
+  const res = Response.json(data, init);
+  return withApiCors(res);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const pathNorm = url.pathname.replace(/\/+$/, "") || "/";
 
+    const metaMatch = pathNorm.match(/^\/api\/room\/(MEETLY-[A-Z0-9-]+)\/meta$/);
+
+    if (request.method === "OPTIONS") {
+      if (pathNorm === "/api/room" || metaMatch) {
+        return new Response(null, { status: 204, headers: CORS_API });
+      }
+    }
+
     if (pathNorm === "/api/room" && request.method === "POST") {
       const code = makeRoomCode();
       const origin = url.origin;
-      return Response.json({
+      return jsonWithCors({
         room: code,
         url: `${origin}/${code}`,
         wsUrl: `${origin.replace(/^http/, "ws")}/call?room=${encodeURIComponent(code)}`,
       });
     }
 
-    const metaMatch = pathNorm.match(/^\/api\/room\/(MEETLY-[A-Z0-9-]+)\/meta$/);
     if (request.method === "GET" && metaMatch) {
       const code = metaMatch[1]!;
       if (!isValidRoomCode(code)) {
-        return new Response("Invalid room", { status: 400 });
+        return withApiCors(new Response("Invalid room", { status: 400 }));
       }
       const id = env.CALL_ROOM.idFromName(code);
       const stub = env.CALL_ROOM.get(id);
-      return stub.fetch(new Request("https://internal/__meta", { method: "GET" }));
+      const metaRes = await stub.fetch(new Request("https://internal/__meta", { method: "GET" }));
+      return withApiCors(metaRes);
     }
 
     if (url.pathname === "/call") {

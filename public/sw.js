@@ -1,4 +1,4 @@
-const CACHE = "meetly-v4";
+const CACHE = "meetly-v5";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -26,7 +26,7 @@ self.addEventListener("fetch", (event) => {
 
   // Network-first for bundled app: avoids stale JS after deploy and prevents
   // ever serving index.html as a script (which breaks the module and all clicks).
-  if (url.pathname === "/app.js") {
+  if (url.pathname === "/app.js" || url.pathname === "/meetly-env.js") {
     event.respondWith(
       fetch(req)
         .then((res) => {

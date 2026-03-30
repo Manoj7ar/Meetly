@@ -75,6 +75,18 @@ npx wrangler secret put ELEVENLABS_KEY
 
 The empty `ELEVENLABS_KEY` entry in `wrangler.jsonc` exists for typing and local development only.
 
+### Frontend on Vercel (optional)
+
+Meetly’s **API, WebSockets, AI, and Durable Objects** stay on **Cloudflare**. Vercel can host **only the static UI** (`public/` after `npm run build`).
+
+1. Add a **`vercel.json`** at the repo root (already included): build `npm run build`, output **`public`**, SPA rewrite to **`/index.html`** so routes like `/join` and `/MEETLY-…` load the app.
+2. In the Vercel project, set a **build environment variable**  
+   **`MEETLY_API_ORIGIN`** = your Worker URL with **no** trailing slash, e.g. `https://meetly.your-subdomain.workers.dev`.  
+   Each build runs `scripts/write-meetly-env.mjs`, which writes `public/meetly-env.js` so the browser calls the Worker for `POST /api/room`, meta, and `wss://…/call`.
+3. **Redeploy the Worker** after updating to this repo version so **CORS** is enabled on the HTTP API (required for cross-origin fetches from `*.vercel.app`).
+
+If `MEETLY_API_ORIGIN` is unset, the UI uses `window.location.origin` (normal **Cloudflare-only** deploy).
+
 ## HTTP and WebSocket endpoints
 
 | Method / path | Description |
