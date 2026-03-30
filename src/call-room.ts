@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { elevenLabsTts, transcribe, translateText, announceTts } from "./pipeline.js";
-import { langLabel } from "./lang.js";
+import { langLabel, hasNonLatinChars } from "./lang.js";
 
 const INTRO_TEXT = "Ready for live translation.";
 
@@ -208,14 +208,21 @@ export class CallRoom extends DurableObject<Env> {
     const env = this.env;
 
     this.ctx.waitUntil((async () => {
-      let text: string;
+      let result: { text: string; detectedLang: string };
       try {
-        text = await transcribe(env, bytes);
+        result = await transcribe(env, bytes);
       } catch (e) {
         console.error("transcribe error", e);
         return;
       }
-      if (!text) return;
+      if (!result.text) return;
+      const { text } = result;
+
+      if (result.detectedLang) {
+        speakerWs.send(JSON.stringify({
+          type: "lang-detected", lang: result.detectedLang,
+        }));
+      }
 
       speakerWs.send(JSON.stringify({
         type: "transcript", from: "self", name: speakerName, text,
@@ -232,8 +239,17 @@ export class CallRoom extends DurableObject<Env> {
       }
       if (!translated) return;
 
+      let pronunciation = "";
+      if (hasNonLatinChars(translated)) {
+        try {
+          const roman = await translateText(env, translated, otherHearLang, "en");
+          if (roman && roman !== translated) pronunciation = roman;
+        } catch { /* skip */ }
+      }
+
       otherWs.send(JSON.stringify({
         type: "transcript", from: "peer", name: speakerName, text: translated,
+        ...(pronunciation ? { pronunciation } : {}),
       }));
 
       try {

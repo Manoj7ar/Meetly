@@ -38,6 +38,42 @@ const LANGS = [
 
 const ROOM_RE = /^\/(MEETLY-[A-Z0-9-]+)\/?$/;
 
+function playChime(type) {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.value = 0.12;
+    if (type === "connect") {
+      osc.frequency.value = 660;
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start(); osc.stop(ctx.currentTime + 0.4);
+    } else if (type === "join") {
+      osc.frequency.value = 880;
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(); osc.stop(ctx.currentTime + 0.3);
+    } else if (type === "leave") {
+      osc.frequency.value = 330;
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(); osc.stop(ctx.currentTime + 0.5);
+    }
+    setTimeout(() => ctx.close(), 1000);
+  } catch {}
+}
+
+function ConnQualityDot({ quality }) {
+  const color = quality === "good" ? "bg-green-400" : quality === "fair" ? "bg-yellow-400" : quality === "poor" ? "bg-red-400" : "bg-white/20";
+  const label = quality === "good" ? "Good" : quality === "fair" ? "Fair" : quality === "poor" ? "Poor" : "";
+  return (
+    <span className="absolute top-2 right-2 flex items-center gap-1" title={label}>
+      <span className={`w-2 h-2 rounded-full ${color}`} />
+    </span>
+  );
+}
+
 function getPath() {
   return window.location.pathname.replace(/\/+$/, "") || "/";
 }
@@ -482,6 +518,10 @@ function CallView({ room, mode, onLeave }) {
   const [announcement, setAnnouncement] = useState("");
   const [transcripts, setTranscripts] = useState([]);
   const transcriptEndRef = useRef(null);
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [connQuality, setConnQuality] = useState("unknown");
+  const [detectedLang, setDetectedLang] = useState("");
+  const screenTrackRef = useRef(null);
 
   const localName = sessionStorage.getItem("meetly_display_name") || (mode === "host" ? "Host" : "Guest");
 
@@ -627,6 +667,24 @@ function CallView({ room, mode, onLeave }) {
     });
     pcRef.current = pc;
 
+    const statsInterval = setInterval(async () => {
+      if (!pc || pc.connectionState === "closed") { clearInterval(statsInterval); return; }
+      try {
+        const stats = await pc.getStats();
+        let totalLost = 0, totalRecv = 0;
+        stats.forEach((r) => {
+          if (r.type === "inbound-rtp" && r.kind === "video") {
+            totalLost += r.packetsLost || 0;
+            totalRecv += r.packetsReceived || 0;
+          }
+        });
+        const total = totalLost + totalRecv;
+        if (total === 0) { setConnQuality("unknown"); return; }
+        const lossRate = totalLost / total;
+        setConnQuality(lossRate < 0.02 ? "good" : lossRate < 0.08 ? "fair" : "poor");
+      } catch { }
+    }, 3000);
+
     pc.ontrack = (ev) => {
       if (remoteV.current && ev.streams[0]) remoteV.current.srcObject = ev.streams[0];
     };
@@ -658,6 +716,7 @@ function CallView({ room, mode, onLeave }) {
 
     ws.onopen = () => {
       setStatus("Connected");
+      playChime("connect");
       ws.send(
         JSON.stringify({
           type: "join",
@@ -690,6 +749,7 @@ function CallView({ room, mode, onLeave }) {
       }
       if (msg.type === "peer-joined") {
         if (msg.displayName) setRemotePeerName(msg.displayName);
+        playChime("join");
         if (isHostRef.current) {
           remoteDescSetRef.current = false;
           iceBufRef.current = [];
@@ -730,10 +790,14 @@ function CallView({ room, mode, onLeave }) {
         setTimeout(() => setAnnouncement(""), 6000);
         return;
       }
+      if (msg.type === "lang-detected") {
+        if (msg.lang) setDetectedLang(msg.lang);
+        return;
+      }
       if (msg.type === "transcript") {
         setTranscripts((prev) => [
           ...prev.slice(-50),
-          { id: Date.now() + Math.random(), from: msg.from, name: msg.name, text: msg.text },
+          { id: Date.now() + Math.random(), from: msg.from, name: msg.name, text: msg.text, pronunciation: msg.pronunciation || "" },
         ]);
         return;
       }
@@ -744,6 +808,7 @@ function CallView({ room, mode, onLeave }) {
       if (msg.type === "peer-left") {
         setRemotePeerName("");
         setStatus("Peer left");
+        playChime("leave");
       }
     };
 
@@ -827,6 +892,39 @@ function CallView({ room, mode, onLeave }) {
     setTimeout(() => setStatus("Connected"), 2000);
   };
 
+  const toggleScreenShare = async () => {
+    const pc = pcRef.current;
+    if (!pc) return;
+    if (screenSharing) {
+      if (screenTrackRef.current) {
+        screenTrackRef.current.stop();
+        screenTrackRef.current = null;
+      }
+      const cam = streamRef.current?.getVideoTracks()[0];
+      if (cam) {
+        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) await sender.replaceTrack(cam);
+      }
+      if (localV.current && streamRef.current) localV.current.srcObject = streamRef.current;
+      setScreenSharing(false);
+      return;
+    }
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = screenStream.getVideoTracks()[0];
+      screenTrackRef.current = screenTrack;
+      const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) await sender.replaceTrack(screenTrack);
+      if (localV.current) localV.current.srcObject = screenStream;
+      setScreenSharing(true);
+      screenTrack.onended = () => {
+        toggleScreenShare();
+      };
+    } catch {
+      setScreenSharing(false);
+    }
+  };
+
   const remoteLabel = remotePeerName || "Guest";
 
   return (
@@ -870,10 +968,19 @@ function CallView({ room, mode, onLeave }) {
           <video ref={localV} autoPlay playsInline muted className="w-full h-full bg-black/10" />
           <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wide bg-teal/90 text-cream px-2 py-0.5 rounded max-w-[90%] truncate">
             You · {localName} · {langLabel(speak)}
+            {detectedLang && detectedLang !== speak && (
+              <span className="ml-1 opacity-70">(detected: {detectedLang})</span>
+            )}
           </span>
+          {screenSharing && (
+            <span className="absolute top-2 left-2 text-[9px] uppercase tracking-wide bg-red-600 text-white px-2 py-0.5 rounded">
+              Screen
+            </span>
+          )}
         </div>
         <div className="relative rounded-2xl overflow-hidden bg-offwhite border border-teal/15 aspect-video shadow-sm">
           <video ref={remoteV} autoPlay playsInline className="w-full h-full bg-black/5" />
+          <ConnQualityDot quality={connQuality} />
           <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wide bg-teal/90 text-cream px-2 py-0.5 rounded max-w-[90%] truncate">
             {remoteLabel} · {langLabel(hear)} voice
           </span>
@@ -894,6 +1001,13 @@ function CallView({ room, mode, onLeave }) {
           className={`rounded-full px-4 py-2 text-sm font-medium ${camOn ? "bg-teal text-cream" : "bg-ink/10 text-ink"}`}
         >
           {camOn ? "Camera on" : "Camera off"}
+        </button>
+        <button
+          type="button"
+          onClick={toggleScreenShare}
+          className={`rounded-full px-4 py-2 text-sm font-medium ${screenSharing ? "bg-red-600 text-white" : "border border-teal text-teal"}`}
+        >
+          {screenSharing ? "Stop share" : "Share screen"}
         </button>
         {mode === "host" && (
           <button
@@ -940,6 +1054,11 @@ function CallView({ room, mode, onLeave }) {
                 }`}
               >
                 {t.text}
+                {t.pronunciation && (
+                  <span className="block text-[10px] mt-0.5 opacity-60 italic font-normal">
+                    {t.pronunciation}
+                  </span>
+                )}
               </span>
             </div>
           ))}

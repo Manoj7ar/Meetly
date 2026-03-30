@@ -38,3 +38,9 @@ export const ANNOUNCE_VOICE = "jqcCZkN6Knx8BJ5TBdYR";
 export function voiceIdForSpeaker(voiceType: string): string {
   return voiceType === "male" ? VOICE_MALE : VOICE_FEMALE;
 }
+
+const NON_LATIN_RE = /[\u0400-\u04FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0B80-\u0BFF\u3040-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u0370-\u03FF\u0E00-\u0E7F]/;
+
+export function hasNonLatinChars(text: string): boolean {
+  return NON_LATIN_RE.test(text);
+}

@@ -2,14 +2,19 @@ import { toM2mLang, voiceIdForSpeaker, ANNOUNCE_VOICE } from "./lang.js";
 
 const FLASH_MODEL = "eleven_flash_v2_5";
 
-export async function transcribe(env: Env, audioBytes: Uint8Array): Promise<string> {
-  if (audioBytes.byteLength < 200) return "";
+export interface TranscribeResult {
+  text: string;
+  detectedLang: string;
+}
+
+export async function transcribe(env: Env, audioBytes: Uint8Array): Promise<TranscribeResult> {
+  if (audioBytes.byteLength < 200) return { text: "", detectedLang: "" };
   const res = (await env.AI.run("@cf/openai/whisper", {
     audio: [...audioBytes],
-  })) as { text?: string };
+  })) as { text?: string; language?: string };
   const text = (res.text ?? "").trim();
-  if (text.length < 2) return "";
-  return text;
+  if (text.length < 2) return { text: "", detectedLang: "" };
+  return { text, detectedLang: res.language ?? "" };
 }
 
 export async function translateText(
