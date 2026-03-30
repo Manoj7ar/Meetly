@@ -1,3 +1,12 @@
+const LANG_LABELS: Record<string, string> = {
+  en: "English", zh: "Mandarin", es: "Spanish", fr: "French", de: "German",
+  ja: "Japanese", ko: "Korean", hi: "Hindi", ar: "Arabic", pt: "Portuguese",
+};
+
+export function langLabel(code: string): string {
+  return LANG_LABELS[code] ?? code;
+}
+
 /** m2m100-1.2b expects lowercase full language names (Workers AI docs). */
 export const LANG_TO_M2M: Record<string, string> = {
   en: "english",
@@ -21,6 +30,9 @@ export function toM2mLang(code: string): string {
  * across all 32 languages supported by eleven_turbo_v2_5.
  */
 const VOICE_DEFAULT = "21m00Tcm4TlvDq8ikWAM";
+
+/** Distinct voice for system announcements so they're clearly "the AI". */
+export const ANNOUNCE_VOICE = "EXAVITQu4vr4xnSDxMaL";
 
 export function voiceIdForHearLang(_hearCode: string): string {
   return VOICE_DEFAULT;

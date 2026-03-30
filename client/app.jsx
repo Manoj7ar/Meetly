@@ -398,6 +398,7 @@ function CallView({ room, mode, onLeave }) {
   const [camOn, setCamOn] = useState(true);
   const [err, setErr] = useState("");
   const [remotePeerName, setRemotePeerName] = useState("");
+  const [announcement, setAnnouncement] = useState("");
 
   const localName = sessionStorage.getItem("meetly_display_name") || (mode === "host" ? "Host" : "Guest");
 
@@ -563,6 +564,7 @@ function CallView({ room, mode, onLeave }) {
           displayName: displayName.trim().slice(0, 64) || "Guest",
         })
       );
+      startRecordingCycle();
     };
 
     ws.onmessage = async (ev) => {
@@ -620,6 +622,11 @@ function CallView({ room, mode, onLeave }) {
         }
         return;
       }
+      if (msg.type === "announcement") {
+        setAnnouncement(msg.text || "");
+        setTimeout(() => setAnnouncement(""), 6000);
+        return;
+      }
       if (msg.type === "error") {
         setErr(msg.message || "Error");
         return;
@@ -636,34 +643,34 @@ function CallView({ room, mode, onLeave }) {
     let mime = "audio/webm;codecs=opus";
     if (!MediaRecorder.isTypeSupported(mime)) mime = "audio/webm";
     const aStream = new MediaStream([atrack]);
+    const CHUNK_MS = 3000;
 
-    const CHUNK_MS = 2500;
-    let currentRec = null;
-    const cycle = () => {
-      if (!wsRef.current || wsRef.current.readyState !== 1) return;
-      const r = new MediaRecorder(aStream, { mimeType: mime });
-      currentRec = r;
-      recRef.current = r;
-      const chunks = [];
-      r.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
+    const startRecordingCycle = () => {
+      const cycle = () => {
+        if (!wsRef.current || wsRef.current.readyState !== 1) return;
+        const r = new MediaRecorder(aStream, { mimeType: mime });
+        recRef.current = r;
+        const chunks = [];
+        r.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+        r.onstop = () => {
+          if (!micOnRef.current || chunks.length === 0) return;
+          const blob = new Blob(chunks, { type: mime });
+          if (blob.size > 0 && wsRef.current && wsRef.current.readyState === 1) {
+            wsRef.current.send(blob);
+          }
+        };
+        r.start();
+        setTimeout(() => {
+          if (r.state === "recording") {
+            r.stop();
+            cycle();
+          }
+        }, CHUNK_MS);
       };
-      r.onstop = () => {
-        if (!micOnRef.current || chunks.length === 0) return;
-        const blob = new Blob(chunks, { type: mime });
-        if (blob.size > 0 && wsRef.current && wsRef.current.readyState === 1) {
-          wsRef.current.send(blob);
-        }
-      };
-      r.start();
-      setTimeout(() => {
-        if (r.state === "recording") {
-          r.stop();
-          cycle();
-        }
-      }, CHUNK_MS);
+      cycle();
     };
-    cycle();
   }, [room, speak, hear, mode, enqueueAudio, flushIce, startOnceKey]);
 
   useEffect(() => {
@@ -735,6 +742,11 @@ function CallView({ room, mode, onLeave }) {
         <span className="text-xs font-mono text-teal truncate max-w-[55%]">{room}</span>
         <span className="text-xs text-ink/50">{status}</span>
       </div>
+      {announcement && (
+        <div className="mb-3 rounded-xl bg-teal/10 border border-teal/20 px-4 py-2.5 text-sm text-teal text-center animate-pulse">
+          {announcement}
+        </div>
+      )}
       {err && <p className="text-sm text-red-600 mb-2">{err}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-h-0">
