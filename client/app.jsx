@@ -660,6 +660,8 @@ function CallView({ room, mode, onLeave }) {
   const playQueueRef = useRef([]);
   const micOnRef = useRef(true);
   const camOnRef = useRef(true);
+  const recordingActiveRef = useRef(false);
+  const restartRecordingRef = useRef(null);
   const startOnceKey = "meetly_call_started_" + room;
 
   useEffect(() => {
@@ -681,49 +683,62 @@ function CallView({ room, mode, onLeave }) {
     }
   }, []);
 
-  const muteForPlayback = useCallback(() => {
+  const stopRecording = useCallback(() => {
+    try {
+      if (recRef.current && recRef.current.state === "recording") {
+        recRef.current.stop();
+      }
+    } catch (_) {}
+    recRef.current = null;
+    recordingActiveRef.current = false;
     const s = streamRef.current;
-    if (!s) return;
-    const a = s.getAudioTracks()[0];
-    if (a) a.enabled = false;
+    if (s) {
+      const a = s.getAudioTracks()[0];
+      if (a) a.enabled = false;
+    }
   }, []);
 
-  const unmuteAfterPlayback = useCallback(() => {
+  const resumeRecording = useCallback(() => {
     const s = streamRef.current;
-    if (!s || !micOnRef.current) return;
-    const a = s.getAudioTracks()[0];
-    if (a) a.enabled = true;
+    if (s && micOnRef.current) {
+      const a = s.getAudioTracks()[0];
+      if (a) a.enabled = true;
+    }
+    if (restartRecordingRef.current) {
+      restartRecordingRef.current();
+    }
   }, []);
 
   const playNextInQueue = useCallback(async () => {
     if (playBusyRef.current || playQueueRef.current.length === 0) return;
     playBusyRef.current = true;
+    stopRecording();
     const chunk = playQueueRef.current.shift();
-    muteForPlayback();
+    let doneCalled = false;
+    const done = () => {
+      if (doneCalled) return;
+      doneCalled = true;
+      if (playQueueRef.current.length > 0) {
+        playNextInQueue();
+      } else {
+        playBusyRef.current = false;
+        setTimeout(() => {
+          if (!playBusyRef.current) resumeRecording();
+        }, 800);
+      }
+    };
     try {
       const blob = new Blob([chunk], { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        playBusyRef.current = false;
-        unmuteAfterPlayback();
-        playNextInQueue();
-      };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        playBusyRef.current = false;
-        unmuteAfterPlayback();
-        playNextInQueue();
-      };
+      audio.onended = () => { URL.revokeObjectURL(url); done(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); done(); };
       await audio.play();
     } catch (e) {
       console.warn("audio play", e);
-      playBusyRef.current = false;
-      unmuteAfterPlayback();
-      playNextInQueue();
+      done();
     }
-  }, [muteForPlayback, unmuteAfterPlayback]);
+  }, [stopRecording, resumeRecording]);
 
   const enqueueAudio = useCallback(
     (buf) => {
@@ -966,19 +981,22 @@ function CallView({ room, mode, onLeave }) {
     const startRecordingCycle = () => {
       const cycle = () => {
         if (!wsRef.current || wsRef.current.readyState !== 1) return;
+        if (playBusyRef.current) return;
         const r = new MediaRecorder(aStream, { mimeType: mime });
         recRef.current = r;
+        recordingActiveRef.current = true;
         const chunks = [];
         r.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
         r.onstop = async () => {
+          recordingActiveRef.current = false;
           if (!micOnRef.current || playBusyRef.current || chunks.length === 0) return;
           const blob = new Blob(chunks, { type: mime });
           if (blob.size === 0 || !wsRef.current || wsRef.current.readyState !== 1) return;
           try {
             const wav = await blobToWav(blob);
-            if (wav && wsRef.current && wsRef.current.readyState === 1) {
+            if (wav && !playBusyRef.current && wsRef.current && wsRef.current.readyState === 1) {
               wsRef.current.send(wav);
             }
           } catch (e) {
@@ -989,10 +1007,11 @@ function CallView({ room, mode, onLeave }) {
         setTimeout(() => {
           if (r.state === "recording") {
             r.stop();
-            cycle();
+            if (!playBusyRef.current) cycle();
           }
         }, CHUNK_MS);
       };
+      restartRecordingRef.current = cycle;
       cycle();
     };
   }, [room, speak, hear, mode, enqueueAudio, flushIce, startOnceKey]);

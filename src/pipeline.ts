@@ -7,7 +7,21 @@ export interface TranscribeResult {
   detectedLang: string;
 }
 
-const HALLUCINATION_RE = /^(you|thank you|thanks|thanks for watching|bye|okay|oh|uh|um|hmm|ah|huh|yeah|yes|no|so|the end|\.+|,+|\!+|\?+)\.?$/i;
+const HALLUCINATION_EXACT = new Set([
+  "you", "thank you", "thanks", "thanks for watching", "thank you for watching",
+  "bye", "goodbye", "okay", "oh", "uh", "um", "hmm", "ah", "huh",
+  "yeah", "yes", "no", "so", "the end", "bye bye", "see you",
+  "subscribe", "like and subscribe", "please subscribe",
+  "silence", "music", "applause", "laughter",
+]);
+
+function isHallucination(text: string): boolean {
+  const lower = text.toLowerCase().replace(/[.,!?]+$/g, "");
+  if (HALLUCINATION_EXACT.has(lower)) return true;
+  if (/^[.!?,\s]+$/.test(text)) return true;
+  if (/^(.)\1+$/.test(lower)) return true;
+  return false;
+}
 
 export async function transcribe(env: Env, audioBytes: Uint8Array): Promise<TranscribeResult> {
   if (audioBytes.byteLength < 500) return { text: "", detectedLang: "" };
@@ -16,7 +30,7 @@ export async function transcribe(env: Env, audioBytes: Uint8Array): Promise<Tran
   })) as { text?: string; language?: string };
   const text = (res.text ?? "").trim();
   if (text.length < 3) return { text: "", detectedLang: "" };
-  if (HALLUCINATION_RE.test(text)) return { text: "", detectedLang: "" };
+  if (isHallucination(text)) return { text: "", detectedLang: "" };
   return { text, detectedLang: res.language ?? "" };
 }
 
