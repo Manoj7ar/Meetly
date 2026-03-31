@@ -640,6 +640,8 @@ function CallView({ room, mode, onLeave }) {
   const [screenSharing, setScreenSharing] = useState(false);
   const [connQuality, setConnQuality] = useState("unknown");
   const [detectedLang, setDetectedLang] = useState("");
+  const [localSpeaking, setLocalSpeaking] = useState(false);
+  const [remoteSpeaking, setRemoteSpeaking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [meetingSummary, setMeetingSummary] = useState(null);
   const screenTrackRef = useRef(null);
@@ -691,19 +693,10 @@ function CallView({ room, mode, onLeave }) {
     } catch (_) {}
     recRef.current = null;
     recordingActiveRef.current = false;
-    const s = streamRef.current;
-    if (s) {
-      const a = s.getAudioTracks()[0];
-      if (a) a.enabled = false;
-    }
+    setLocalSpeaking(false);
   }, []);
 
   const resumeRecording = useCallback(() => {
-    const s = streamRef.current;
-    if (s && micOnRef.current) {
-      const a = s.getAudioTracks()[0];
-      if (a) a.enabled = true;
-    }
     if (restartRecordingRef.current) {
       restartRecordingRef.current();
     }
@@ -946,6 +939,10 @@ function CallView({ room, mode, onLeave }) {
           ...prev.slice(-50),
           { id: Date.now() + Math.random(), from: msg.from, name: msg.name, text: msg.text, pronunciation: msg.pronunciation || "" },
         ]);
+        if (msg.from === "peer") {
+          setRemoteSpeaking(true);
+          setTimeout(() => setRemoteSpeaking(false), 3000);
+        }
         return;
       }
       if (msg.type === "meeting-summary") {
@@ -976,43 +973,114 @@ function CallView({ room, mode, onLeave }) {
     let mime = "audio/webm;codecs=opus";
     if (!MediaRecorder.isTypeSupported(mime)) mime = "audio/webm";
     const aStream = new MediaStream([atrack]);
-    const CHUNK_MS = 2500;
+
+    const vadCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const vadSource = vadCtx.createMediaStreamSource(aStream);
+    const vadAnalyser = vadCtx.createAnalyser();
+    vadAnalyser.fftSize = 512;
+    vadSource.connect(vadAnalyser);
+    const vadBuf = new Float32Array(vadAnalyser.fftSize);
+
+    const SPEECH_THRESHOLD = 0.015;
+    const SILENCE_DURATION = 600;
+    const MIN_SPEECH_MS = 400;
+    const MAX_CHUNK_MS = 8000;
 
     const startRecordingCycle = () => {
-      const cycle = () => {
-        if (!wsRef.current || wsRef.current.readyState !== 1) return;
-        if (playBusyRef.current) return;
-        const r = new MediaRecorder(aStream, { mimeType: mime });
-        recRef.current = r;
+      let recorder = null;
+      let chunks = [];
+      let speechStart = 0;
+      let lastSpeechAt = 0;
+      let recording = false;
+      let vadTimer = null;
+
+      const getRMS = () => {
+        vadAnalyser.getFloatTimeDomainData(vadBuf);
+        let sum = 0;
+        for (let i = 0; i < vadBuf.length; i++) sum += vadBuf[i] * vadBuf[i];
+        return Math.sqrt(sum / vadBuf.length);
+      };
+
+      const sendChunk = async () => {
+        if (playBusyRef.current || chunks.length === 0) { chunks = []; return; }
+        const blob = new Blob(chunks, { type: mime });
+        chunks = [];
+        if (blob.size === 0 || !wsRef.current || wsRef.current.readyState !== 1) return;
+        try {
+          const wav = await blobToWav(blob);
+          if (wav && !playBusyRef.current && wsRef.current && wsRef.current.readyState === 1) {
+            wsRef.current.send(wav);
+          }
+        } catch (e) { console.warn("wav convert", e); }
+      };
+
+      const stopCurrent = () => {
+        if (recorder && recorder.state === "recording") {
+          recorder.stop();
+        }
+        recorder = null;
+        recording = false;
+        recordingActiveRef.current = false;
+        setLocalSpeaking(false);
+      };
+
+      const startNew = () => {
+        if (playBusyRef.current || !wsRef.current || wsRef.current.readyState !== 1) return;
+        chunks = [];
+        recorder = new MediaRecorder(aStream, { mimeType: mime });
+        recRef.current = recorder;
         recordingActiveRef.current = true;
-        const chunks = [];
-        r.ondataavailable = (e) => {
+        recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
-        r.onstop = async () => {
+        recorder.onstop = () => {
           recordingActiveRef.current = false;
-          if (!micOnRef.current || playBusyRef.current || chunks.length === 0) return;
-          const blob = new Blob(chunks, { type: mime });
-          if (blob.size === 0 || !wsRef.current || wsRef.current.readyState !== 1) return;
-          try {
-            const wav = await blobToWav(blob);
-            if (wav && !playBusyRef.current && wsRef.current && wsRef.current.readyState === 1) {
-              wsRef.current.send(wav);
-            }
-          } catch (e) {
-            console.warn("wav convert", e);
-          }
+          if (!micOnRef.current || playBusyRef.current) { chunks = []; return; }
+          sendChunk();
         };
-        r.start();
-        setTimeout(() => {
-          if (r.state === "recording") {
-            r.stop();
-            if (!playBusyRef.current) cycle();
-          }
-        }, CHUNK_MS);
+        recorder.start(100);
+        recording = true;
+        speechStart = Date.now();
+        setLocalSpeaking(true);
       };
-      restartRecordingRef.current = cycle;
-      cycle();
+
+      const tick = () => {
+        if (playBusyRef.current || !micOnRef.current) {
+          if (recording) stopCurrent();
+          return;
+        }
+        const rms = getRMS();
+        const now = Date.now();
+
+        if (rms > SPEECH_THRESHOLD) {
+          lastSpeechAt = now;
+          if (!recording) startNew();
+        }
+
+        if (recording) {
+          const elapsed = now - speechStart;
+          const silentFor = now - lastSpeechAt;
+          if (silentFor > SILENCE_DURATION && elapsed > MIN_SPEECH_MS) {
+            stopCurrent();
+          } else if (elapsed > MAX_CHUNK_MS) {
+            stopCurrent();
+            startNew();
+          }
+        }
+      };
+
+      vadTimer = setInterval(tick, 50);
+
+      const cleanup = () => {
+        if (vadTimer) clearInterval(vadTimer);
+        stopCurrent();
+      };
+
+      restartRecordingRef.current = () => {
+        if (!vadTimer) vadTimer = setInterval(tick, 50);
+      };
+
+      return cleanup;
     };
   }, [room, speak, hear, mode, enqueueAudio, flushIce, startOnceKey]);
 
@@ -1151,7 +1219,7 @@ function CallView({ room, mode, onLeave }) {
       {err && <p className="text-sm text-red-600 mb-2">{err}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-h-0 transition-all duration-500 ease-in-out">
-        <div className="relative rounded-2xl overflow-hidden bg-offwhite border border-teal/15 aspect-video shadow-sm">
+        <div className={`relative rounded-2xl overflow-hidden bg-offwhite aspect-video shadow-sm transition-all duration-300 ${localSpeaking ? "border-2 border-green-400" : "border border-teal/15"}`}>
           <video ref={localV} autoPlay playsInline muted className="w-full h-full bg-black/10" />
           <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wide bg-teal/90 text-cream px-2 py-0.5 rounded max-w-[90%] truncate">
             You · {localName} · {langLabel(speak)}
@@ -1159,15 +1227,25 @@ function CallView({ room, mode, onLeave }) {
               <span className="ml-1 opacity-70">(detected: {detectedLang})</span>
             )}
           </span>
+          {localSpeaking && (
+            <span className="absolute top-2 right-2 flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+            </span>
+          )}
           {screenSharing && (
             <span className="absolute top-2 left-2 text-[9px] uppercase tracking-wide bg-red-600 text-white px-2 py-0.5 rounded">
               Screen
             </span>
           )}
         </div>
-        <div className="relative rounded-2xl overflow-hidden bg-offwhite border border-teal/15 aspect-video shadow-sm">
+        <div className={`relative rounded-2xl overflow-hidden bg-offwhite aspect-video shadow-sm transition-all duration-300 ${remoteSpeaking ? "border-2 border-green-400" : "border border-teal/15"}`}>
           <video ref={remoteV} autoPlay playsInline className="w-full h-full bg-black/5" />
           <ConnQualityDot quality={connQuality} />
+          {remoteSpeaking && (
+            <span className="absolute top-2 left-2 flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+            </span>
+          )}
           <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wide bg-teal/90 text-cream px-2 py-0.5 rounded max-w-[90%] truncate">
             {remoteLabel} · {langLabel(hear)} voice
           </span>
