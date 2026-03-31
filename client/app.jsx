@@ -714,30 +714,29 @@ function CallView({ room, mode, onLeave }) {
     playBusyRef.current = true;
     stopRecording();
     const chunk = playQueueRef.current.shift();
+    let doneCalled = false;
+    const done = () => {
+      if (doneCalled) return;
+      doneCalled = true;
+      if (playQueueRef.current.length > 0) {
+        playNextInQueue();
+      } else {
+        playBusyRef.current = false;
+        setTimeout(() => {
+          if (!playBusyRef.current) resumeRecording();
+        }, 800);
+      }
+    };
     try {
       const blob = new Blob([chunk], { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      const done = () => {
-        URL.revokeObjectURL(url);
-        playBusyRef.current = false;
-        if (playQueueRef.current.length > 0) {
-          playNextInQueue();
-        } else {
-          setTimeout(() => {
-            if (!playBusyRef.current) resumeRecording();
-          }, 600);
-        }
-      };
-      audio.onended = done;
-      audio.onerror = done;
+      audio.onended = () => { URL.revokeObjectURL(url); done(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); done(); };
       await audio.play();
     } catch (e) {
       console.warn("audio play", e);
-      playBusyRef.current = false;
-      setTimeout(() => {
-        if (!playBusyRef.current) resumeRecording();
-      }, 600);
+      done();
     }
   }, [stopRecording, resumeRecording]);
 
