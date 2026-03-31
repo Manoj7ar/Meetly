@@ -22,6 +22,7 @@ export class CallRoom extends DurableObject<Env> {
   private hostSpeakLang: string | null = null;
   private hostHearLang: string | null = null;
   private transcriptLog: string[] = [];
+  private lastTextByParticipant = new Map<string, { text: string; time: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -204,6 +205,7 @@ export class CallRoom extends DurableObject<Env> {
       return;
     }
 
+    const speakerId = fromId;
     const speakerWs = ws;
     const otherWs = other.ws;
     const speakerName = speaker.displayName;
@@ -222,6 +224,16 @@ export class CallRoom extends DurableObject<Env> {
       }
       if (!result.text) return;
       const { text } = result;
+
+      const now = Date.now();
+      const lastEntry = this.lastTextByParticipant.get(speakerId);
+      if (lastEntry) {
+        const timeDiff = now - lastEntry.time;
+        const isSame = lastEntry.text === text;
+        const isSimilar = text.length > 5 && lastEntry.text.includes(text.slice(0, Math.floor(text.length * 0.7)));
+        if ((isSame || isSimilar) && timeDiff < 15000) return;
+      }
+      this.lastTextByParticipant.set(speakerId, { text, time: now });
 
       if (result.detectedLang) {
         speakerWs.send(JSON.stringify({
