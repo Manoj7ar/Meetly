@@ -24,7 +24,7 @@ function isHallucination(text: string): boolean {
 }
 
 export async function transcribe(env: Env, audioBytes: Uint8Array): Promise<TranscribeResult> {
-  if (audioBytes.byteLength < 500) return { text: "", detectedLang: "" };
+  if (audioBytes.byteLength < 5000) return { text: "", detectedLang: "" };
   const res = (await env.AI.run("@cf/openai/whisper", {
     audio: [...audioBytes],
   })) as { text?: string; language?: string };

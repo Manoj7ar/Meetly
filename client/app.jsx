@@ -717,7 +717,7 @@ function CallView({ room, mode, onLeave }) {
         playBusyRef.current = false;
         setTimeout(() => {
           if (!playBusyRef.current) resumeRecording();
-        }, 800);
+        }, 1500);
       }
     };
     try {
@@ -975,16 +975,18 @@ function CallView({ room, mode, onLeave }) {
     const aStream = new MediaStream([atrack]);
 
     const vadCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (vadCtx.state === "suspended") vadCtx.resume();
     const vadSource = vadCtx.createMediaStreamSource(aStream);
     const vadAnalyser = vadCtx.createAnalyser();
     vadAnalyser.fftSize = 512;
     vadSource.connect(vadAnalyser);
     const vadBuf = new Float32Array(vadAnalyser.fftSize);
 
-    const SPEECH_THRESHOLD = 0.015;
-    const SILENCE_DURATION = 600;
-    const MIN_SPEECH_MS = 400;
-    const MAX_CHUNK_MS = 8000;
+    const SPEECH_THRESHOLD = 0.03;
+    const SILENCE_DURATION = 800;
+    const MIN_SPEECH_MS = 600;
+    const MAX_CHUNK_MS = 7000;
+    const CONFIRM_FRAMES = 3;
 
     const startRecordingCycle = () => {
       let recorder = null;
@@ -993,6 +995,7 @@ function CallView({ room, mode, onLeave }) {
       let lastSpeechAt = 0;
       let recording = false;
       let vadTimer = null;
+      let speechFrames = 0;
 
       const getRMS = () => {
         vadAnalyser.getFloatTimeDomainData(vadBuf);
@@ -1020,6 +1023,7 @@ function CallView({ room, mode, onLeave }) {
         }
         recorder = null;
         recording = false;
+        speechFrames = 0;
         recordingActiveRef.current = false;
         setLocalSpeaking(false);
       };
@@ -1047,14 +1051,18 @@ function CallView({ room, mode, onLeave }) {
       const tick = () => {
         if (playBusyRef.current || !micOnRef.current) {
           if (recording) stopCurrent();
+          speechFrames = 0;
           return;
         }
         const rms = getRMS();
         const now = Date.now();
 
         if (rms > SPEECH_THRESHOLD) {
+          speechFrames++;
           lastSpeechAt = now;
-          if (!recording) startNew();
+          if (!recording && speechFrames >= CONFIRM_FRAMES) startNew();
+        } else {
+          if (!recording) speechFrames = 0;
         }
 
         if (recording) {
@@ -1072,8 +1080,9 @@ function CallView({ room, mode, onLeave }) {
       vadTimer = setInterval(tick, 50);
 
       const cleanup = () => {
-        if (vadTimer) clearInterval(vadTimer);
+        if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
         stopCurrent();
+        try { vadCtx.close(); } catch {}
       };
 
       restartRecordingRef.current = () => {
