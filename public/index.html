@@ -28,6 +28,27 @@
     html, body, #root { height: 100%; margin: 0; }
     body { background: #FFFDF5; color: #2D2D2D; }
     video { object-fit: cover; }
+    .glass {
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.2);
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .glass::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 50%;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0));
+      pointer-events: none;
+      border-radius: inherit;
+    }
+    .glass:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.25);
+    }
+    .glass:active { transform: scale(0.97); }
   </style>
 </head>
 <body class="bg-cream text-ink antialiased">
