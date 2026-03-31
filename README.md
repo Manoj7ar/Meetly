@@ -4,7 +4,7 @@
 
 Meetly is a 1:1 video calling app where each person speaks their own language and hears the other person in theirs, in real time. Built entirely on Cloudflare Workers, Durable Objects, Workers AI, and ElevenLabs text-to-speech.
 
-**Live:** [meetly.manoj07ar.workers.dev](https://meetly.manoj07ar.workers.dev)
+**Live:** [usemeetly.vercel.app](usemeetly.vercel.app)
 
 ---
 
